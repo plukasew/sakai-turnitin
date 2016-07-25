@@ -9842,8 +9842,8 @@ public class AssignmentAction extends PagedResourceActionII
         dform.applyPattern("yyyy-MM-dd HH:mm:ss");
         opts.put("dtstart", dform.format(openTime.getTime()));  // old Turnitin Sakai API integration
         opts.put("dtdue", dform.format(dueTime.getTime()));  // old Turnitin Sakai API integration
-		opts.put("timestampOpen", openTime.getTime());  // new Turnitin LTI integration
-		opts.put("timestampDue", dueTime.getTime());  // new Turnitin LTI integration
+        opts.put("timestampOpen", openTime.getTime());  // new Turnitin LTI integration
+        opts.put("timestampDue", dueTime.getTime());  // new Turnitin LTI integration
         opts.put("title", assign.getTitle());
         opts.put("instructions", assign.getInstructions());
         opts.put("assignmentContentId", assign.getReference());
