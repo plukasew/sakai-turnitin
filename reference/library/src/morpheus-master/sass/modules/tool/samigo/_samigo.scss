@@ -59,7 +59,27 @@
 			margin: 0 0 0 0.5em;
 		}
 	}
-
+	
+	.matrixSurvey{
+		padding: 0 1em 0 1em;
+	}
+	
+	.feedBackCheck, .feedBackCross{
+		margin-right: 0.2em;
+	}
+	
+	.feedBackCheck{
+		color: $okcolor;
+	}
+	
+	.feedBackCross{
+		color: darken($errorcolor, 30%);
+	}
+	
+	.feedBackMultipleChoice{
+		width: 2em;
+	}
+	
 	.disabledField{
 		color: darken( $errorcolor, 30% );
 		text-decoration: line-through;
@@ -71,7 +91,7 @@
 			padding: 0 0 0 0;
 		}
 	}
-	.mcscFixUp > ul{
+	.mcscFixUp > ul,.question-wrapper{
 		list-style: none;
 		padding: 0 0 0 0;
 	}
@@ -120,14 +140,32 @@
 		}
 	}
 	
-	#assessmentSettingsAction .layout-navigation input[type="radio"],
-	#assessmentSettingsAction\:toDefaultGradebook{
+	#assessmentSettingsAction .layout-navigation input[type="radio"]{
 		@media #{$nonPhone}{
 			float:left;
 			& + label {
 				overflow:auto;
 				display:block;
 				margin-left: 1.5em;
+			}
+		}
+	}
+	
+	#assessmentSettingsAction input[type="radio"],
+	#assessmentSettingsAction input[type="checkbox"]{
+		@media #{$tablet}{
+			float:left;
+			& + label {
+				overflow:auto;
+				display:block;
+			}
+		}
+	}
+	
+	#assessmentSettingsAction input[type="checkbox"]{
+		@media #{$tablet}{
+			& + label {
+			margin-left: 1.5em;
 			}
 		}
 	}
@@ -142,5 +180,11 @@
 	
 	#samLiteEntryForm\:data{
 		margin-top: 1.2em;
+	}
+	
+	#templateCreateForm{
+		label[for="templateCreateForm:tempName"]{
+			margin-right: 1em;
+		}
 	}
 }
