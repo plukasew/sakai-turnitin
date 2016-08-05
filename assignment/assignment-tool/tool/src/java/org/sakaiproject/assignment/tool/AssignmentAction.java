@@ -1972,9 +1972,45 @@ public class AssignmentAction extends PagedResourceActionII
 			//warnings if user's fields are not set
 			if (allowReviewService && currentAssignment.getContent().getAllowReviewService()){
 				context.put("usingreview", true);
-				context.put("namenull", Boolean.valueOf(StringUtils.isEmpty(user.getFirstName())));
-				context.put("lastname", Boolean.valueOf(StringUtils.isEmpty(user.getLastName())));
-				context.put("mailnull", Boolean.valueOf(StringUtils.isEmpty(user.getEmail())));
+				boolean generateFirstNameIfMissing = ServerConfigurationService.getBoolean( "turnitin.generate.first.name", false );
+				boolean generateSurnameIfMissing = ServerConfigurationService.getBoolean( "turnitin.generate.last.name", false );
+				boolean detailsMissing = false;
+
+				List<String> missingFields = new ArrayList<>();
+				if( !generateFirstNameIfMissing && StringUtils.isBlank( user.getFirstName() ) )
+				{
+					detailsMissing = true;
+					missingFields.add( rb.getString( "review.user.missing.details.firstName" ) );
+				}
+				if( !generateSurnameIfMissing && StringUtils.isBlank( user.getLastName() ) )
+				{
+					detailsMissing = true;
+					missingFields.add( rb.getString( "review.user.missing.details.surname" ) );
+				}
+				if( StringUtils.isBlank( user.getEmail() ) )
+				{
+					detailsMissing = true;
+					missingFields.add( rb.getString( "review.user.missing.details.email" ) );
+				}
+
+				String and = rb.getString( "review.user.missing.details.and" );
+				StringBuilder sb = new StringBuilder();
+				for( int i = 0; i < missingFields.size(); i++ )
+				{
+					sb.append( missingFields.get( i ) );
+					if( i < missingFields.size() - 2 && missingFields.size() > 2 )
+					{
+						sb.append( ", " );
+					}
+					if( i == missingFields.size() - 2 )
+					{
+						sb.append( " " ).append( and ).append( " " );
+					}
+				}
+
+				String missingUserDetailsMessage = rb.getFormattedMessage( "review.user.missing.details", new Object[]{ reviewServiceName, sb.toString() } );
+				context.put( "missingUserDetails", detailsMissing );
+				context.put( "missingUserDetailsMessage", missingUserDetailsMessage);
 			} else {
 				context.put("usingreview", false);
 			}
