@@ -1989,8 +1989,9 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 				retVal.setIndividuallyGraded(existingContent.individuallyGraded());
 				retVal.setReleaseGrades(existingContent.releaseGrades());
 				retVal.setAllowAttachments(existingContent.getAllowAttachments());
+
 				// for ContentReview service
-				retVal.setAllowReviewService(existingContent.getAllowReviewService());
+				duplicateContentReviewSettings( retVal, existingContent );
 
 				tempVector = existingContent.getAttachments();
 				if (tempVector != null)
@@ -2037,6 +2038,30 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 			M_log.debug(this + " LEAVING ADD DUPLICATE CONTENT WITH ID : " + retVal != null ? retVal.getId() : "");
 
 		return retVal;
+	}
+
+	/**
+	 * This method is responsible for duplicating all settings relevant to content review services
+	 * between the duplicate and original assignment.
+	 * @param duplicate the new assignment to copy settings to
+	 * @param original the original assignment to copy settings from
+	 */
+	private void duplicateContentReviewSettings( AssignmentContentEdit duplicate, AssignmentContent original )
+	{
+		duplicate.setAllowReviewService( original.getAllowReviewService() );
+		duplicate.setAllowAnyFile( original.isAllowAnyFile() );
+		duplicate.setCheckInstitution( original.isCheckInstitution() );
+		duplicate.setCheckInternet( original.isCheckInternet() );
+		duplicate.setCheckPublications( original.isCheckPublications() );
+		duplicate.setCheckTurnitin( original.isCheckTurnitin() );
+		duplicate.setExcludeBibliographic( original.isExcludeBibliographic() );
+		duplicate.setExcludeQuoted( original.isExcludeQuoted() );
+		duplicate.setExcludeType( original.getExcludeType() );
+		duplicate.setExcludeValue( original.getExcludeValue() );
+		duplicate.setGenerateOriginalityReport( original.getGenerateOriginalityReport() );
+		duplicate.setSubmitReviewRepo( original.getSubmitReviewRepo() );
+		duplicate.setAllowStudentViewExternalGrade( original.getAllowStudentViewExternalGrade() );
+		duplicate.setAllowStudentViewReport( original.getAllowStudentViewReport() );
 	}
 
 	/**
@@ -7167,8 +7192,10 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 							nContent.setTitle(oContent.getTitle());
 							nContent.setTypeOfGrade(oContent.getTypeOfGrade());
 							nContent.setTypeOfSubmission(oContent.getTypeOfSubmission());
-							// review service
-							nContent.setAllowReviewService(oContent.getAllowReviewService());
+
+							// Content Review Service settings
+							duplicateContentReviewSettings( nContent, oContent );
+
 							// properties
 							ResourcePropertiesEdit p = nContent.getPropertiesEdit();
 							p.clear();
