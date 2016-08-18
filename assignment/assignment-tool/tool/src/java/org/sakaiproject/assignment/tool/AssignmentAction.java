@@ -7276,7 +7276,7 @@ public class AssignmentAction extends PagedResourceActionII
 		String assignmentRef = params.getString("assignmentId");
 
 		// put the input value into the state attributes
-		String title = params.getString(NEW_ASSIGNMENT_TITLE);
+		String title = params.getString(NEW_ASSIGNMENT_TITLE).trim();
 		state.setAttribute(NEW_ASSIGNMENT_TITLE, title);
 		
 		String order = params.getString(NEW_ASSIGNMENT_ORDER);
@@ -8447,7 +8447,7 @@ public class AssignmentAction extends PagedResourceActionII
 			bool_change_resubmit_option = change_resubmit_option(state, a);
 
 			// put the names and values into vm file
-			String title = (String) state.getAttribute(NEW_ASSIGNMENT_TITLE);
+			String title = ((String) state.getAttribute(NEW_ASSIGNMENT_TITLE)).trim();
 			String order = (String) state.getAttribute(NEW_ASSIGNMENT_ORDER);
 
 			// open time
