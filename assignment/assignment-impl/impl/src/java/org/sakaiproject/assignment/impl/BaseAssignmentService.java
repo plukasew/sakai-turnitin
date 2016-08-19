@@ -678,6 +678,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 	/** Dependency: allowSubmitByInstructor setting */
 	protected boolean m_allowSubmitByInstructor = true;
 
+	protected boolean m_exposeTurnitinErrorToUI = false;
+
 	/**
 	 * Dependency: allowSubmitByInstructor
 	 * 
@@ -745,6 +747,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
         } else {
             M_log.info("Instructor submission of assignments is enabled");
         }
+
+		m_exposeTurnitinErrorToUI = m_serverConfigurationService.getBoolean( "turnitin.exposeErrorToUI", false );
 
 		// register as an entity producer
 		m_entityManager.registerEntityProducer(this, REFERENCE_ROOT);
@@ -11064,7 +11068,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
                     // to get a i18n message of the error
                     Long status = contentReviewService.getReviewStatus(contentId);
                     String errorMessage = null; 
-                    
+
+                    boolean exposeError = false;
                     if (status != null) {
                         if (status.equals(ContentReviewItem.REPORT_ERROR_NO_RETRY_CODE)) {
                             errorMessage = rb.getString("content_review.error.REPORT_ERROR_NO_RETRY_CODE");
@@ -11072,8 +11077,10 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
                             errorMessage = rb.getString("content_review.error.REPORT_ERROR_RETRY_CODE");
                         } else if (status.equals(ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE)) {
                             errorMessage = rb.getString("content_review.error.SUBMISSION_ERROR_NO_RETRY_CODE");
+                            exposeError = true;
                         } else if (status.equals(ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE)) {
                             errorMessage = rb.getString("content_review.error.SUBMISSION_ERROR_RETRY_CODE");
+                            exposeError = true;
                         } else if (status.equals(ContentReviewItem.SUBMISSION_ERROR_RETRY_EXCEEDED)) {
                             errorMessage = rb.getString("content_review.error.SUBMISSION_ERROR_RETRY_EXCEEDED_CODE");
                         } else if (status.equals(ContentReviewItem.SUBMISSION_ERROR_USER_DETAILS_CODE)) {
@@ -11083,11 +11090,16 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
                         	errorMessage = rb.getString("content_review.pending.info");
                         }
                     }
-                    
+
                     if (errorMessage == null) {
                         errorMessage = rb.getString("content_review.error");
                     }
-                    
+
+                    // Expose the underlying CRS error to the UI
+                    if( exposeError && m_exposeTurnitinErrorToUI ) {
+                        errorMessage += " " + getLastErrorForContentReviewItem( contentId );
+                    }
+
                     return errorMessage;
                 } catch (Exception e) {
                     //e.printStackTrace();
@@ -11115,6 +11127,7 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 				//to get a i18n message of the error
 				Long status = contentReviewService.getReviewStatus(contentId);
 				String errorMessage = null;
+				boolean exposeError = false;
 
 				// TODO: we can remove this null check if we use yoda statements below
 				if (status != null)
@@ -11130,10 +11143,12 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 					else if (status.equals(ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE))
 					{
 						errorMessage = rb.getString("content_review.error.SUBMISSION_ERROR_NO_RETRY_CODE");
+						exposeError = true;
 					}
 					else if (status.equals(ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE))
 					{
 						errorMessage = rb.getString("content_review.error.SUBMISSION_ERROR_RETRY_CODE");
+						exposeError = true;
 					}
 					else if (status.equals(ContentReviewItem.SUBMISSION_ERROR_RETRY_EXCEEDED))
 					{
@@ -11154,6 +11169,12 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 					errorMessage = rb.getString("content_review.error");
 				}
 
+				// Expose the underlying CRS error to the UI
+				if( exposeError && m_exposeTurnitinErrorToUI )
+				{
+					errorMessage += " " + getLastErrorForContentReviewItem( contentId );
+				}
+
 				return errorMessage;
 			}
 			catch (Exception e)
@@ -11161,6 +11182,18 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 				M_log.warn(this + ":getReviewError(ContentResource) " + e.getMessage());
 				return null;
 			}
+		}
+
+		/**
+		 * Convenience method to retreive the lastError for a content review item, given the content resouece ID
+		 * @param contentID the content resource ID of the content review item we're trying to access
+		 * @return a formatted String containing the lastError message for the content review item asked for
+		 */
+		private String getLastErrorForContentReviewItem( String contentID )
+		{
+			ContentReviewItem cri = contentReviewService.getFirstItemByContentId( contentID );
+			Object[] args = new String[] { contentReviewService.getServiceName(), cri.getLastError() };
+			return rb.getFormattedMessage( "content_review.errorFromSource", args );
 		}
 
 
