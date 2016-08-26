@@ -12989,11 +12989,43 @@ public class AssignmentAction extends PagedResourceActionII
 		state.removeAttribute(ALLPURPOSE_ACCESS);
 		state.removeAttribute(ALLPURPOSE_ATTACHMENTS);
 
+		// remove content-review settings
+		removeTurnitinSettingsFromState( state );
+
 		// SAK-17606
 		state.removeAttribute(NEW_ASSIGNMENT_CHECK_ANONYMOUS_GRADING);
 
 	} // initializeAssignment
-	
+
+	/**
+	 * This method is responsible for removing all relevant Turnitin settings from the state.
+	 * @param state 
+	 */
+	private void removeTurnitinSettingsFromState( SessionState state )
+	{
+		state.removeAttribute( NEW_ASSIGNMENT_USE_REVIEW_SERVICE );
+		state.removeAttribute( NEW_ASSIGNMENT_ALLOW_STUDENT_VIEW );
+		state.removeAttribute( NEW_ASSIGNMENT_ALLOW_STUDENT_VIEW_EXTERNAL_GRADE );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_RADIO );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_NONE );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_STANDARD );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_INSITUTION );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_RADIO );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_IMMEDIATELY );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_IMMEDIATELY_RESUB );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_DUE );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_TURNITIN );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_INTERNET );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_PUB );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_INSTITUTION );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_BIBLIOGRAPHIC );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_QUOTED );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_SMALL_MATCHES );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_TYPE );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_VALUE );
+		state.removeAttribute( NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE );
+	}
+
 	/**
 	 * reset the attributes for assignment
 	 */
@@ -13102,27 +13134,7 @@ public class AssignmentAction extends PagedResourceActionII
 		state.removeAttribute(NEW_ASSIGNMENT_PEER_ASSESSMENT_INSTRUCTIONS);
 		
 		// remove content-review settings
-		state.removeAttribute(NEW_ASSIGNMENT_USE_REVIEW_SERVICE);
-		state.removeAttribute(NEW_ASSIGNMENT_ALLOW_STUDENT_VIEW);
-		state.removeAttribute(NEW_ASSIGNMENT_ALLOW_STUDENT_VIEW_EXTERNAL_GRADE);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_RADIO);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_NONE);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_STANDARD);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_SUBMIT_INSITUTION);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_RADIO);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_IMMEDIATELY);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_IMMEDIATELY_RESUB);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_REPORT_DUE);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_TURNITIN);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_INTERNET);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_PUB);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_INSTITUTION);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_BIBLIOGRAPHIC);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_QUOTED);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_SMALL_MATCHES);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_TYPE);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_VALUE);
-		state.removeAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE);
+		removeTurnitinSettingsFromState( state );
 		
 		state.removeAttribute(Assignment.ASSIGNMENT_RELEASERESUBMISSION_NOTIFICATION_VALUE);
 		
