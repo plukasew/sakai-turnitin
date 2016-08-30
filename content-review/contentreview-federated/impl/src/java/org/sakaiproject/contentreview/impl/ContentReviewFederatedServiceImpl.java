@@ -419,5 +419,29 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 			return provider.getExternalGradeForContentId(contentId);
 		return null;
 	}
+	
+	@Override
+	public boolean saveOrUpdateActivityConfigEntry(String name, String value, String activityId, String toolId, int providerId, boolean overrideIfSet)
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+		{
+			return provider.saveOrUpdateActivityConfigEntry(name, value, activityId, toolId, providerId, overrideIfSet);
+		}
+
+		return false;
+	}
+
+	@Override
+	public String getActivityConfigValue(String name, String activityId, String toolId, int providerId)
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+		{
+			return provider.getActivityConfigValue(name, activityId, toolId, providerId);
+		}
+
+		return "";
+	}
 
 }
