@@ -52,6 +52,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.concurrent.ConcurrentSkipListSet;
@@ -188,23 +189,20 @@ import org.sakaiproject.util.Validator;
  */
 public class AssignmentAction extends PagedResourceActionII
 {
-	private static ResourceLoader rb = new ResourceLoader("assignment");
+	private static final ResourceLoader rb = new ResourceLoader("assignment");
 	
 	/** Our logger. */
-	private static Log M_log = LogFactory.getLog(AssignmentAction.class);
+	private static final Log M_log = LogFactory.getLog(AssignmentAction.class);
 
 	private static final String ASSIGNMENT_TOOL_ID = "sakai.assignment.grades";
 	
 	private static final Boolean allowReviewService = ServerConfigurationService.getBoolean("assignment.useContentReview", false);
 	private static final Boolean allowPeerAssessment = ServerConfigurationService.getBoolean("assignment.usePeerAssessment", true);
-	private static Boolean allowLTIReviewService = false;
-	private static Boolean isDirectAccess = false;
 	private static final int contentreviewSiteYears = ServerConfigurationService.getInt("contentreview.site.years", 0);//TII value = 6
 	private static final int contentreviewSiteMin = ServerConfigurationService.getInt("contentreview.site.min", 0);//TII value = 5
 	private static final int contentreviewSiteMax = ServerConfigurationService.getInt("contentreview.site.max", 0);//TII value = 50
 	private static final int contentreviewAssignMin = ServerConfigurationService.getInt("contentreview.assign.min", 0);//TII value = 3
 	private static final int contentreviewAssignMax = ServerConfigurationService.getInt("contentreview.assign.max", 0);//TII value = 100
-	private static String reviewServiceName = "Review Service Default";
 	
 	/** Is the review service available? */
 	//Peer Assessment
@@ -1018,7 +1016,7 @@ public class AssignmentAction extends PagedResourceActionII
 
 		if (allowReviewService && contentReviewService != null && contentReviewService.isSiteAcceptable(s)) {
 			//put the review service strings in context
-			reviewServiceName = contentReviewService.getServiceName();
+			String reviewServiceName = contentReviewService.getServiceName();
 			String reviewServiceTitle = rb.getFormattedMessage("review.title", new Object[]{reviewServiceName});
 			String reviewServiceUse = rb.getFormattedMessage("review.use", new Object[]{reviewServiceName});
 			String reviewServiceNonElectronic1 = rb.getFormattedMessage("review.switch.ne.1", reviewServiceName);
@@ -1029,16 +1027,6 @@ public class AssignmentAction extends PagedResourceActionII
 			context.put("reviewIndicator", rb.getFormattedMessage("review.contentReviewIndicator", new Object[]{reviewServiceName}));
 			context.put("reviewSwitchNe1", reviewServiceNonElectronic1);
 			context.put("reviewSwitchNe2", reviewServiceNonElectronic2);
-			if(contentReviewSiteAdvisor.siteCanUseLTIReviewService(s)){
-				allowLTIReviewService = true;
-			} else {
-				allowLTIReviewService = false;
-			}
-			if(contentReviewService.isDirectAccess(s)){
-				isDirectAccess = true;
-			} else {
-				isDirectAccess = false;
-			}
 		}
 		
 		//Peer Assessment
@@ -1607,14 +1595,15 @@ public class AssignmentAction extends PagedResourceActionII
 			canViewAssignmentIntoContext(context, assignment, s);
 			
 			// add TII info if needed
-			if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService){
+			Optional<Site> siteOpt = getSiteFromState(state);
+			if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(siteOpt)){
 				//put the LTI assignment link in context
 				String ltiLink = contentReviewService.getLTIAccess(currentAssignmentReference, contextString);
 				M_log.debug("ltiLink " + ltiLink);
 				context.put("ltiLink", ltiLink);
 				int maxPointsInt = assignment.getContent().getMaxGradePoint() / AssignmentService.getScaleFactor();
 				context.put("maxPointsInt", maxPointsInt);
-				if(isDirectAccess && Boolean.valueOf(AssignmentService.canSubmit(contextString, assignment))){
+				if(isDirectAccess(siteOpt) && Boolean.valueOf(AssignmentService.canSubmit(contextString, assignment))){
 					M_log.debug("Allowing submission directly from TII");
 					String templateAux = (String) getContext(data).get("template");
 					return templateAux + "_lti_access";
@@ -2008,7 +1997,7 @@ public class AssignmentAction extends PagedResourceActionII
 					}
 				}
 
-				String missingUserDetailsMessage = rb.getFormattedMessage( "review.user.missing.details", new Object[]{ reviewServiceName, sb.toString() } );
+				String missingUserDetailsMessage = rb.getFormattedMessage( "review.user.missing.details", new Object[]{ contentReviewService.getServiceName(), sb.toString() } );
 				context.put( "missingUserDetails", detailsMissing );
 				context.put( "missingUserDetailsMessage", missingUserDetailsMessage);
 			} else {
@@ -2357,7 +2346,7 @@ public class AssignmentAction extends PagedResourceActionII
 		
 		// add TII info if needed
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService){
+		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
 			//put the LTI assignment link in context
 			String ltiLink = contentReviewService.getLTIAccess(assignment.getId(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
@@ -3701,7 +3690,7 @@ public class AssignmentAction extends PagedResourceActionII
 		
 		// add TII info if needed
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && a.getContent().getAllowReviewService() && allowLTIReviewService){
+		if (allowReviewService && a.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
 			//put the LTI assignment link in context
 			String ltiLink = contentReviewService.getLTIAccess(assignmentId, contextString);
 			M_log.debug("ltiLink " + ltiLink);
@@ -4460,13 +4449,14 @@ public class AssignmentAction extends PagedResourceActionII
 		String template = (String) getContext(data).get("template");
 		
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && assignment != null && assignmentContent != null && assignmentContent.getAllowReviewService() && allowLTIReviewService){
+		Optional<Site> siteOpt = getSiteFromState(state);
+		if (allowReviewService && assignment != null && assignmentContent != null && assignmentContent.getAllowReviewService() && allowLTIReviewService(siteOpt)){
 			String ltiLink = contentReviewService.getLTIAccess(assignmentRef, contextString);
 			M_log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
 			int maxPointsInt = assignmentContent.getMaxGradePoint() / AssignmentService.getScaleFactor();
 			context.put("maxPointsInt", maxPointsInt);
-			if(isDirectAccess){
+			if(isDirectAccess(siteOpt)){
 				M_log.debug("Allowing submission directly from TII");
 				return template + "_lti_access";
 			}
@@ -4579,7 +4569,7 @@ public class AssignmentAction extends PagedResourceActionII
 		context.put("honor_pledge_text", ServerConfigurationService.getString("assignment.honor.pledge", rb.getString("gen.honple2")));
 		
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService){
+		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
 			//put the LTI assignment link in context
 			String ltiLink = contentReviewService.getLTIAccess(assignmentId, contextString);
 			M_log.debug("ltiLink " + ltiLink);
@@ -7468,7 +7458,7 @@ public class AssignmentAction extends PagedResourceActionII
 				addAlert(state, rb.getString("gen.cr.submit"));
 			}
 
-			if (allowReviewService && allowLTIReviewService && validify){
+			if (allowReviewService && allowLTIReviewService(Optional.ofNullable(st)) && validify){
 				if (title != null && contentreviewAssignMin > 0 && title.length() < contentreviewAssignMin){
 					// if the title is shorter than the minimum post the message
 					// One could ignore the message and still post the assignment
@@ -7501,6 +7491,7 @@ public class AssignmentAction extends PagedResourceActionII
 				} else {
 					state.removeAttribute(NEW_ASSIGNMENT_INSTRUCTOR_FIELDS);
 				}
+				String reviewServiceName = contentReviewService.getServiceName();
 				if (StringUtils.isBlank( title ) || (contentreviewAssignMin > 0 && title.length() < contentreviewAssignMin)){
 					addAlert(state, rb.getFormattedMessage("review.assignchars", new Object[]{reviewServiceName, contentreviewAssignMin}));
 				}
@@ -10409,7 +10400,8 @@ public class AssignmentAction extends PagedResourceActionII
 				state.setAttribute(STATE_MODE, MODE_INSTRUCTOR_NEW_EDIT_ASSIGNMENT);
 				
 				// generate alert when editing an assignment from old site
-				if(allowReviewService && allowLTIReviewService && a.getContent().getAllowReviewService()){
+				if(allowReviewService && allowLTIReviewService(getSiteFromState(state)) && a.getContent().getAllowReviewService()){
+					String reviewServiceName = contentReviewService.getServiceName();
 					if (contentreviewAssignMin > 0 && a.getTitle().length() < contentreviewAssignMin){
 						addAlert(state, rb.getFormattedMessage("review.assignchars", new Object[]{reviewServiceName, contentreviewAssignMin}));
 					}
@@ -11902,7 +11894,7 @@ public class AssignmentAction extends PagedResourceActionII
 	 */
 	private void removeLTITool(SessionState state, AssignmentEdit aEdit){
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && aEdit.getContent().getAllowReviewService() && allowLTIReviewService){
+		if (allowReviewService && aEdit.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
 			//put the LTI assignment link in context
 			boolean removed = contentReviewService.deleteLTITool(aEdit.getReference(), contextString);
 			if(!removed){
@@ -18088,5 +18080,29 @@ public class AssignmentAction extends PagedResourceActionII
 			}
 		}
 	}
-
+	
+	private boolean allowLTIReviewService(Optional<Site> siteOpt)
+	{
+		return siteOpt.map(s -> contentReviewSiteAdvisor.siteCanUseLTIReviewService(s)).orElse(false);
+	}
+	
+	private boolean isDirectAccess(Optional<Site> siteOpt)
+	{
+		return siteOpt.map(s -> contentReviewService.isDirectAccess(s)).orElse(false);
+	}
+	
+	private Optional<Site> getSiteFromState(SessionState state)
+	{
+		String siteId = StringUtils.trimToEmpty((String) state.getAttribute(STATE_CONTEXT_STRING));
+		try
+		{
+			return Optional.of(SiteService.getSite(siteId));
+			
+		}
+		catch (IdUnusedException e)
+		{
+			M_log.warn("Site not found for id: " + siteId, e);
+			return Optional.empty();
+		}
+	}
 }	
