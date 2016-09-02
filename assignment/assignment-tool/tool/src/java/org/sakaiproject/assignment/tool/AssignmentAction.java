@@ -7450,12 +7450,17 @@ public class AssignmentAction extends PagedResourceActionII
 			} catch (IdUnusedException iue) {
 				M_log.warn(this + ":setNewAssignmentParameters: Site not found!" + iue.getMessage());
 			}
+
 			//TODO depending on new federated integration, use one property or another to check we're using TII
-			if (contentReviewSiteAdvisor.siteCanUseReviewService(st)
-					&& ((Integer) state.getAttribute(NEW_ASSIGNMENT_SUBMISSION_TYPE)).intValue() != Assignment.SINGLE_ATTACHMENT_SUBMISSION &&
-						((Integer) state.getAttribute(NEW_ASSIGNMENT_SUBMISSION_TYPE)).intValue() != Assignment.TEXT_ONLY_ASSIGNMENT_SUBMISSION )
+			String reviewServiceName = contentReviewService.getServiceName();
+			if (contentReviewSiteAdvisor.siteCanUseReviewService(st))
 			{
-				addAlert(state, rb.getString("gen.cr.submit"));
+				if (!contentReviewService.allowMultipleAttachments()
+					&&((Integer) state.getAttribute(NEW_ASSIGNMENT_SUBMISSION_TYPE)).intValue() != Assignment.SINGLE_ATTACHMENT_SUBMISSION &&
+						((Integer) state.getAttribute(NEW_ASSIGNMENT_SUBMISSION_TYPE)).intValue() != Assignment.TEXT_ONLY_ASSIGNMENT_SUBMISSION )
+				{
+					addAlert(state, rb.getFormattedMessage("gen.cr.submit", new Object[]{reviewServiceName}));
+				}
 			}
 
 			if (allowReviewService && allowLTIReviewService(Optional.ofNullable(st)) && validify){
@@ -7491,7 +7496,6 @@ public class AssignmentAction extends PagedResourceActionII
 				} else {
 					state.removeAttribute(NEW_ASSIGNMENT_INSTRUCTOR_FIELDS);
 				}
-				String reviewServiceName = contentReviewService.getServiceName();
 				if (StringUtils.isBlank( title ) || (contentreviewAssignMin > 0 && title.length() < contentreviewAssignMin)){
 					addAlert(state, rb.getFormattedMessage("review.assignchars", new Object[]{reviewServiceName, contentreviewAssignMin}));
 				}
