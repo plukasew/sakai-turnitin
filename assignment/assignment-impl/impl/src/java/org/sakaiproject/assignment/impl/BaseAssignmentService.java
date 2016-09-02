@@ -10933,7 +10933,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 					String contentId = cr.getId();
 					try {
 						Site site = SiteService.getSite(m_context);
-						boolean siteCanUseLTIReviewService = contentReviewSiteAdvisor.siteCanUseLTIReviewService(site);
+						Date asnCreationDate = new Date(m_asn.getTimeCreated().getTime());
+						boolean siteCanUseLTIReviewService = contentReviewSiteAdvisor.siteCanUseLTIReviewServiceForAssignment(site, asnCreationDate);
 						if (siteCanUseLTIReviewService) {
 							return contentReviewService.getReviewReport(contentId, null, null);
 						} else {
@@ -10974,7 +10975,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 				String contentId = cr.getId();
 				try {
 					Site site = SiteService.getSite(m_context);
-					boolean siteCanUseLTIReviewService = contentReviewSiteAdvisor.siteCanUseLTIReviewService(site);
+					Date asnCreationDate = new Date(m_asn.getTimeCreated().getTime());
+					boolean siteCanUseLTIReviewService = contentReviewSiteAdvisor.siteCanUseLTIReviewServiceForAssignment(site, asnCreationDate);
 					if (siteCanUseLTIReviewService) {
 						return contentReviewService.getReviewReport(contentId, null, null);
 					} else {

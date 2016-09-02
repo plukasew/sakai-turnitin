@@ -315,6 +315,13 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 			return provider.isDirectAccess(arg0);
 		return false;
 	}
+	
+	public boolean isDirectAccess(Site arg0, Date asnCreationDate) {
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+			return provider.isDirectAccess(arg0, asnCreationDate);
+		return false;
+	}
 
 	public void processQueue() {
 		ContentReviewService provider = getSelectedProvider();
