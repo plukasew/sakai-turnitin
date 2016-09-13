@@ -203,6 +203,8 @@ public class AssignmentAction extends PagedResourceActionII
 	private static final int contentreviewSiteMax = ServerConfigurationService.getInt("contentreview.site.max", 0);//TII value = 50
 	private static final int contentreviewAssignMin = ServerConfigurationService.getInt("contentreview.assign.min", 0);//TII value = 3
 	private static final int contentreviewAssignMax = ServerConfigurationService.getInt("contentreview.assign.max", 0);//TII value = 100
+	private static final boolean hideAllowAnyFileOption = ServerConfigurationService.getBoolean("turnitin.option.any_file.hide", false);
+	private static final boolean allowAnyFileOptionDefault = ServerConfigurationService.getBoolean("turnitin.option.any_file.default", false);
 	
 	/** Is the review service available? */
 	//Peer Assessment
@@ -2737,7 +2739,8 @@ public class AssignmentAction extends PagedResourceActionII
 		context.put("value_NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_PUB", state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_PUB) == null ? Boolean.toString(ServerConfigurationService.getBoolean("turnitin.option.journal_check.default", ServerConfigurationService.getBoolean("turnitin.option.journal_check", true) ? true : false)) : state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_PUB));
 		context.put("value_NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_INSTITUTION", state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_INSTITUTION) == null ? Boolean.toString(ServerConfigurationService.getBoolean("turnitin.option.institution_check.default", ServerConfigurationService.getBoolean("turnitin.option.institution_check", true) ? true : false)) : state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_CHECK_INSTITUTION));
 		
-		context.put("value_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE", state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE) == null ? Boolean.toString(ServerConfigurationService.getBoolean("turnitin.option.any_file.default", false)) : state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE));
+		context.put("value_NEW_ASSIGNMENT_REVIEW_SERVICE_HIDE_ALLOW_ANY_FILE", Boolean.toString(hideAllowAnyFileOption));
+		context.put("value_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE", state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE) == null ? Boolean.toString(allowAnyFileOptionDefault) : state.getAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE));
 
 		//exclude bibliographic materials
 		context.put("show_NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_BIBLIOGRAPHIC", ServerConfigurationService.getBoolean("turnitin.option.exclude_bibliographic", true));
@@ -7576,10 +7579,15 @@ public class AssignmentAction extends PagedResourceActionII
 		state.setAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_EXCLUDE_SMALL_MATCHES, b);
 		
 		//allow any type
-		r = params.getString(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE);
-		if (r == null) b = Boolean.FALSE.toString();
-		else b = Boolean.TRUE.toString();
-		state.setAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE, b);
+		if (hideAllowAnyFileOption)
+		{
+			state.setAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE, Boolean.toString(allowAnyFileOptionDefault));
+		}
+		else
+		{
+			r = params.getString(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE);
+			state.setAttribute(NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE, Boolean.toString(r != null));
+		}
 
 		//exclude type:
 		//only options are 0=none, 1=words, 2=percentages

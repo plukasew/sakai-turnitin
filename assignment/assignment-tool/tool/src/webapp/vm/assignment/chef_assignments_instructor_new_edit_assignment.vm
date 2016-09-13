@@ -620,16 +620,18 @@
 							</label>
 						</div>
 					#end
-					<div>
-						#if ($!value_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE.equals("true"))			
-							<input id="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" name="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" type="checkbox" value="true" checked="checked" />
-						#else
-							<input id="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" name="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" type="checkbox" value="true" />
-						#end
-						<label for="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE">
-							$tlang.getString("review.originality.allow.any.file") 
-						</label>
-					</div>
+					#if (!$!value_NEW_ASSIGNMENT_REVIEW_SERVICE_HIDE_ALLOW_ANY_FILE.equals("true"))
+						<div>
+							#if ($!value_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE.equals("true"))			
+								<input id="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" name="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" type="checkbox" value="true" checked="checked" />
+							#else
+								<input id="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" name="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE" type="checkbox" value="true" />
+							#end
+							<label for="$name_NEW_ASSIGNMENT_REVIEW_SERVICE_ALLOW_ANY_FILE">
+								$tlang.getString("review.originality.allow.any.file") 
+							</label>
+						</div>
+					#end
 					
 					<h5>
 						$tlang.getString("review.originality.reports")
