@@ -6728,6 +6728,7 @@ public class AssignmentAction extends PagedResourceActionII
 								//Check if we need to post the attachments
 								if (a.getContent().getAllowReviewService() && post) {
 									if (!attachments.isEmpty()) { 
+										sEdit.setSubmitterId(u.getId());
 										if(!isPreviousSubmissionTime){//isUserSubmission can be used too
 											sEdit.postAttachment(attachments);
 										} else {
@@ -6820,6 +6821,7 @@ public class AssignmentAction extends PagedResourceActionII
 							{
 	 							// add each attachment
 								if ((!attachments.isEmpty()) && a.getContent().getAllowReviewService() && post) 
+									edit.setSubmitterId(u.getId());
 									edit.postAttachment(attachments);								
 								
 								// add each attachment
@@ -6971,7 +6973,7 @@ public class AssignmentAction extends PagedResourceActionII
 			// TODO: need to put this file in some kind of list to improve performance with web service impls of content-review service
 			String contentUserId = isOnBehalfOfStudent ? student.getId() : currentUser.getId();
 			if(!isResubmission){
-				contentReviewService.queueContent(null, null, edit.getAssignment().getReference(), Arrays.asList(attachment), edit.getId(), isResubmission);
+				contentReviewService.queueContent(contentUserId, null, edit.getAssignment().getReference(), Arrays.asList(attachment), edit.getId(), isResubmission);
 			}
 
 			try
