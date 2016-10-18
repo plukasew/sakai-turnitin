@@ -116,6 +116,14 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 			ServerConfigurationService serverConfigurationService) {
 		this.serverConfigurationService = serverConfigurationService;
 	}
+
+	public boolean allowMultipleAttachments()
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+			return provider.allowMultipleAttachments();
+		return false;
+	}
 	
 	public boolean allowResubmission() {
 		ContentReviewService provider = getSelectedProvider();

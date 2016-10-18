@@ -269,6 +269,12 @@ public interface ContentReviewService {
 	 * @return
 	 */
 	public String getIconColorforScore(Long score);
+
+	/**
+	 *  Does the service support multiple attachments on a single submission?
+	 * @return
+	 */
+	public boolean allowMultipleAttachments();
 	
 	/**
 	 *  Does the service support resubmissions?
