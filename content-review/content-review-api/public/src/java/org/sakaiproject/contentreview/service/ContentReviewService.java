@@ -453,4 +453,12 @@ public interface ContentReviewService {
 	 * @return true if the config attribute value was added or changed
 	 */
 	public boolean saveOrUpdateActivityConfigEntry(String name, String value, String activityId, String toolId, int providerId, boolean overrideIfSet);
+	
+	/**
+	 * Migrates the original LTI XML settings from the assignments table into the new activity config table.
+	 * Also moves the external value from the content resource binary entity back into the contentreviewitem table.
+	 * You need to run this ONLY if you have previously deployed the LTI integration prior to the introduction of TII-219 and TII-221.
+	 */
+	public void migrateLtiXml();
+
 }

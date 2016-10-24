@@ -443,5 +443,15 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 
 		return "";
 	}
+	
+	@Override
+	public void migrateLtiXml()
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+		{
+			provider.migrateLtiXml();
+		}
+	}
 
 }
