@@ -6731,7 +6731,9 @@ public class AssignmentAction extends PagedResourceActionII
 								//Check if we need to post the attachments
 								if (a.getContent().getAllowReviewService() && post) {
 									if (!attachments.isEmpty()) { 
-										sEdit.setSubmitterId(u.getId());
+										if (!a.isGroup()) {
+											sEdit.setSubmitterId(u.getId());
+										}
 										if(!isPreviousSubmissionTime){//isUserSubmission can be used too
 											sEdit.postAttachment(attachments);
 										} else {
@@ -6823,9 +6825,10 @@ public class AssignmentAction extends PagedResourceActionII
 							if (attachments != null)
 							{
 	 							// add each attachment
-								if ((!attachments.isEmpty()) && a.getContent().getAllowReviewService() && post) 
+								if ((!attachments.isEmpty()) && a.getContent().getAllowReviewService() && post && !a.isGroup()) {
 									edit.setSubmitterId(u.getId());
-									edit.postAttachment(attachments);								
+								}
+								edit.postAttachment(attachments);
 								
 								// add each attachment
 								Iterator it = attachments.iterator();
