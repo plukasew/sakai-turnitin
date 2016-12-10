@@ -2350,7 +2350,7 @@ public class AssignmentAction extends PagedResourceActionII
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
 		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
 			//put the LTI assignment link in context
-			String ltiLink = contentReviewService.getLTIAccess(assignment.getId(), contextString);
+			String ltiLink = contentReviewService.getLTIAccess(assignment.getReference(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
 			int maxPointsInt = assignment.getContent().getMaxGradePoint() / AssignmentService.getScaleFactor();
@@ -3695,7 +3695,7 @@ public class AssignmentAction extends PagedResourceActionII
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
 		if (allowReviewService && a.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
 			//put the LTI assignment link in context
-			String ltiLink = contentReviewService.getLTIAccess(assignmentId, contextString);
+			String ltiLink = contentReviewService.getLTIAccess(a.getReference(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
 			int maxPointsInt = a.getContent().getMaxGradePoint() / AssignmentService.getScaleFactor();
@@ -4452,6 +4452,7 @@ public class AssignmentAction extends PagedResourceActionII
 		String template = (String) getContext(data).get("template");
 		
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
+
 		Optional<Site> siteOpt = getSiteFromState(state);
 		if (allowReviewService && assignment != null && assignmentContent != null && assignmentContent.getAllowReviewService() && allowLTIReviewService(siteOpt)){
 			String ltiLink = contentReviewService.getLTIAccess(assignmentRef, contextString);
@@ -4574,7 +4575,7 @@ public class AssignmentAction extends PagedResourceActionII
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
 		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
 			//put the LTI assignment link in context
-			String ltiLink = contentReviewService.getLTIAccess(assignmentId, contextString);
+			String ltiLink = contentReviewService.getLTIAccess(assignment.getReference(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
 		}

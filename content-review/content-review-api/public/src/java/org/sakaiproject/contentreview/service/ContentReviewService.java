@@ -431,4 +431,34 @@ public interface ContentReviewService {
 	 * @return
 	 */
 	public String getExternalGradeForContentId(String contentId);
+	
+	/**
+	 * Returns the value set for the named configuration setting, or empty string if not set
+	 * @param name the name (key) of the config setting
+	 * @param activityId the internal identifier of the particular activity within the tool (ex: a particular assignmentId)
+	 * @param toolId the Sakai tool id (ex: sakai.assignment.grades)
+	 * @param providerId the unique identifier for the content review provider
+	 * @return the configuration value, or empty string
+	 */
+	public String getActivityConfigValue(String name, String activityId, String toolId, int providerId);
+
+	/**
+	 * Sets the activity config attribute to the given value
+	 * @param name the config attribute name
+	 * @param value the config attribute value
+	 * @param activityId activityId the unique identifier for the activity (ex: an assignment id)
+	 * @param toolId the Sakai tool id (ex: sakai.assignment.grades)
+	 * @param providerId the unique identifier of the content review service provider this configuration applies to
+	 * @param overrideIfSet if true, will override the attribute value if it is already set
+	 * @return true if the config attribute value was added or changed
+	 */
+	public boolean saveOrUpdateActivityConfigEntry(String name, String value, String activityId, String toolId, int providerId, boolean overrideIfSet);
+	
+	/**
+	 * Migrates the original LTI XML settings from the assignments table into the new activity config table.
+	 * Also moves the external value from the content resource binary entity back into the contentreviewitem table.
+	 * You need to run this ONLY if you have previously deployed the LTI integration prior to the introduction of TII-219 and TII-221.
+	 */
+	public void migrateLtiXml();
+
 }
