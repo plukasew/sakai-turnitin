@@ -257,6 +257,16 @@ public interface ContentReviewService {
 	public boolean isDirectAccess(Site s);
 	
 	/**
+	 * Version of the above method compatible with date-aware site advisors. This is a transitional
+	 * method that should be removed when TII legacy api support ends
+	 * @param s
+	 * @param assignmentCreationDate
+	 * @return 
+	 */
+	@Deprecated
+	public boolean isDirectAccess(Site s, Date assignmentCreationDate);
+	
+	/**
 	 *  Get a icon URL that for a specific score
 	 * @param score
 	 * @return

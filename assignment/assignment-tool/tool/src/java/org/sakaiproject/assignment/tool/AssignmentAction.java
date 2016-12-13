@@ -58,6 +58,7 @@ import java.util.SortedSet;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Optional;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
@@ -1598,14 +1599,16 @@ public class AssignmentAction extends PagedResourceActionII
 			
 			// add TII info if needed
 			Optional<Site> siteOpt = getSiteFromState(state);
-			if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(siteOpt)){
+			AssignmentContent ac = assignment.getContent();
+			if (allowReviewService && ac.getAllowReviewService() && allowLTIReviewService(siteOpt, assignment)){
 				//put the LTI assignment link in context
 				String ltiLink = contentReviewService.getLTIAccess(currentAssignmentReference, contextString);
 				M_log.debug("ltiLink " + ltiLink);
 				context.put("ltiLink", ltiLink);
-				int maxPointsInt = assignment.getContent().getMaxGradePoint() / AssignmentService.getScaleFactor();
+				int maxPointsInt = ac.getMaxGradePoint() / AssignmentService.getScaleFactor();
 				context.put("maxPointsInt", maxPointsInt);
-				if(isDirectAccess(siteOpt) && Boolean.valueOf(AssignmentService.canSubmit(contextString, assignment))){
+
+				if(isDirectAccess(siteOpt, assignment) && Boolean.valueOf(AssignmentService.canSubmit(contextString, assignment))){
 					M_log.debug("Allowing submission directly from TII");
 					String templateAux = (String) getContext(data).get("template");
 					return templateAux + "_lti_access";
@@ -2348,12 +2351,13 @@ public class AssignmentAction extends PagedResourceActionII
 		
 		// add TII info if needed
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
+		AssignmentContent ac = assignment == null ? null : assignment.getContent();
+		if (allowReviewService && ac != null && ac.getAllowReviewService() && allowLTIReviewService(getSiteFromState(state), assignment)){
 			//put the LTI assignment link in context
 			String ltiLink = contentReviewService.getLTIAccess(assignment.getReference(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
-			int maxPointsInt = assignment.getContent().getMaxGradePoint() / AssignmentService.getScaleFactor();
+			int maxPointsInt = ac.getMaxGradePoint() / AssignmentService.getScaleFactor();
 			context.put("maxPointsInt", maxPointsInt);
 		}
 		
@@ -3693,12 +3697,14 @@ public class AssignmentAction extends PagedResourceActionII
 		
 		// add TII info if needed
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && a.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
+
+		AssignmentContent ac = a.getContent();
+		if (allowReviewService && ac.getAllowReviewService() && allowLTIReviewService(getSiteFromState(state), a)){
 			//put the LTI assignment link in context
 			String ltiLink = contentReviewService.getLTIAccess(a.getReference(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
-			int maxPointsInt = a.getContent().getMaxGradePoint() / AssignmentService.getScaleFactor();
+			int maxPointsInt = ac.getMaxGradePoint() / AssignmentService.getScaleFactor();
 			context.put("maxPointsInt", maxPointsInt);
 		}
 		
@@ -4454,13 +4460,14 @@ public class AssignmentAction extends PagedResourceActionII
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
 
 		Optional<Site> siteOpt = getSiteFromState(state);
-		if (allowReviewService && assignment != null && assignmentContent != null && assignmentContent.getAllowReviewService() && allowLTIReviewService(siteOpt)){
+		if (allowReviewService && assignment != null && assignmentContent != null && assignmentContent.getAllowReviewService() && allowLTIReviewService(siteOpt, assignment)){
 			String ltiLink = contentReviewService.getLTIAccess(assignmentRef, contextString);
 			M_log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
 			int maxPointsInt = assignmentContent.getMaxGradePoint() / AssignmentService.getScaleFactor();
 			context.put("maxPointsInt", maxPointsInt);
-			if(isDirectAccess(siteOpt)){
+
+			if(isDirectAccess(siteOpt, assignment)){
 				M_log.debug("Allowing submission directly from TII");
 				return template + "_lti_access";
 			}
@@ -4573,7 +4580,7 @@ public class AssignmentAction extends PagedResourceActionII
 		context.put("honor_pledge_text", ServerConfigurationService.getString("assignment.honor.pledge", rb.getString("gen.honple2")));
 		
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
+		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state), assignment)){
 			//put the LTI assignment link in context
 			String ltiLink = contentReviewService.getLTIAccess(assignment.getReference(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
@@ -7472,7 +7479,16 @@ public class AssignmentAction extends PagedResourceActionII
 				}
 			}
 
-			if (allowReviewService && allowLTIReviewService(Optional.ofNullable(st)) && validify){
+			Assignment asn = null;
+			try
+			{
+				asn = AssignmentService.getAssignment(assignmentRef);
+			}
+			catch (IdUnusedException | PermissionException e)
+			{
+				// do nothing, will check for null later
+			}
+			if (allowReviewService && st != null && asn != null && allowLTIReviewService(Optional.of(st), asn) && validify){
 				if (title != null && contentreviewAssignMin > 0 && title.length() < contentreviewAssignMin){
 					// if the title is shorter than the minimum post the message
 					// One could ignore the message and still post the assignment
@@ -10418,7 +10434,7 @@ public class AssignmentAction extends PagedResourceActionII
 				state.setAttribute(STATE_MODE, MODE_INSTRUCTOR_NEW_EDIT_ASSIGNMENT);
 				
 				// generate alert when editing an assignment from old site
-				if(allowReviewService && allowLTIReviewService(getSiteFromState(state)) && a.getContent().getAllowReviewService()){
+				if(allowReviewService && allowLTIReviewService(getSiteFromState(state), a) && a.getContent().getAllowReviewService()){
 					String reviewServiceName = contentReviewService.getServiceName();
 					if (contentreviewAssignMin > 0 && a.getTitle().length() < contentreviewAssignMin){
 						addAlert(state, rb.getFormattedMessage("review.assignchars", new Object[]{reviewServiceName, contentreviewAssignMin}));
@@ -11912,7 +11928,8 @@ public class AssignmentAction extends PagedResourceActionII
 	 */
 	private void removeLTITool(SessionState state, AssignmentEdit aEdit){
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && aEdit.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state))){
+
+		if (allowReviewService && aEdit.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state), aEdit)){
 			//put the LTI assignment link in context
 			boolean removed = contentReviewService.deleteLTITool(aEdit.getReference(), contextString);
 			if(!removed){
@@ -18098,15 +18115,29 @@ public class AssignmentAction extends PagedResourceActionII
 			}
 		}
 	}
-	
-	private boolean allowLTIReviewService(Optional<Site> siteOpt)
+
+	// this method is transitional and should be removed when TII legacy api support ends
+	private boolean allowLTIReviewService(Optional<Site> siteOpt, Assignment assignment)
 	{
-		return siteOpt.map(s -> contentReviewSiteAdvisor.siteCanUseLTIReviewService(s)).orElse(false);
+		if (assignment == null)
+		{
+			return false;
+		}
+		
+		return siteOpt.map(s -> contentReviewSiteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, new Date(assignment.getTimeCreated().getTime())))
+				.orElse(false);
 	}
 	
-	private boolean isDirectAccess(Optional<Site> siteOpt)
+	// this method is transitional and (at least the Assignment argument) should be removed when TII legacy support ends
+	private boolean isDirectAccess(Optional<Site> siteOpt, Assignment assignment)
 	{
-		return siteOpt.map(s -> contentReviewService.isDirectAccess(s)).orElse(false);
+		if (assignment == null)
+		{
+			return false;
+		}
+		
+		return siteOpt.map(s -> contentReviewService.isDirectAccess(s, new Date(assignment.getTimeCreated().getTime())))
+				.orElse(false);
 	}
 	
 	private Optional<Site> getSiteFromState(SessionState state)
