@@ -831,6 +831,7 @@ public interface LTIService {
 	static final String LTI_STATUS = 	"status";
 	static final String LTI_VISIBLE = 	"visible";
 	static final String LTI_LAUNCH = 	"launch";
+	static final String LTI_LAUNCHSUFFIX = 	"launch_suffix";
 	static final String LTI_ALLOWLAUNCH = 	"allowlaunch";
 	static final String LTI_CONSUMERKEY= 	"consumerkey";
 	static final String LTI_ALLOWCONSUMERKEY= 	"allowconsumerkey";

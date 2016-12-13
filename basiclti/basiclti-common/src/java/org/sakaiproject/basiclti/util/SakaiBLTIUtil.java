@@ -773,6 +773,12 @@ public class SakaiBLTIUtil {
 		if ( launch_url == null ) launch_url = (String) tool.get(LTIService.LTI_LAUNCH);
 		if ( launch_url == null ) return postError("<p>" + getRB(rb, "error.nolaunch" ,"This tool is not yet configured.")+"</p>" );
 
+		String launchSuffix = (String)content.get(LTIService.LTI_LAUNCHSUFFIX);
+		if (launchSuffix != null)
+		{
+			launch_url = launch_url + launchSuffix;
+		}
+
 		String context = (String) content.get(LTIService.LTI_SITE_ID);
 		Site site = null;
 		try {
