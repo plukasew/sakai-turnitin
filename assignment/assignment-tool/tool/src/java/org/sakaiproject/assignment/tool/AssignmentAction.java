@@ -7479,16 +7479,8 @@ public class AssignmentAction extends PagedResourceActionII
 				}
 			}
 
-			Assignment asn = null;
-			try
+			if (allowReviewService && st != null && contentReviewSiteAdvisor.siteCanUseLTIReviewServiceForAssignment( st, new Date() ) && validify)
 			{
-				asn = AssignmentService.getAssignment(assignmentRef);
-			}
-			catch (IdUnusedException | PermissionException e)
-			{
-				// do nothing, will check for null later
-			}
-			if (allowReviewService && st != null && asn != null && allowLTIReviewService(Optional.of(st), asn) && validify){
 				if (title != null && contentreviewAssignMin > 0 && title.length() < contentreviewAssignMin){
 					// if the title is shorter than the minimum post the message
 					// One could ignore the message and still post the assignment
@@ -7540,7 +7532,7 @@ public class AssignmentAction extends PagedResourceActionII
 					agoCalendar.add(GregorianCalendar.YEAR, -contentreviewSiteYears);
 					Date agoDate = agoCalendar.getTime();
 					if (st.getCreatedDate().before(agoDate)){
-						addAlert(state, rb.getFormattedMessage("review.oldsite", new Object[]{contentreviewSiteYears}));
+						addAlert(state, rb.getFormattedMessage("review.oldsite", new Object[]{contentreviewSiteYears, reviewServiceName}));
 					}
 				}
 			}
@@ -10460,7 +10452,7 @@ public class AssignmentAction extends PagedResourceActionII
 							agoCalendar.add(GregorianCalendar.YEAR, -contentreviewSiteYears);
 							Date agoDate = agoCalendar.getTime();
 							if (st.getCreatedDate().before(agoDate)){
-								addAlert(state, rb.getFormattedMessage("review.oldsite", new Object[]{contentreviewSiteYears}));
+								addAlert(state, rb.getFormattedMessage("review.oldsite", new Object[]{contentreviewSiteYears, reviewServiceName}));
 							}
 						}
 					} catch (IdUnusedException iue) {
@@ -11426,7 +11418,7 @@ public class AssignmentAction extends PagedResourceActionII
 		SessionState state = ((JetspeedRunData) data).getPortletSessionState(((JetspeedRunData) data).getJs_peid());
 		String actualGradeSubmissionId = (String) params.getString("submissionId");
 
-		Log.debug("chef", "doAssignment_form(): actualGradeSubmissionId = " + actualGradeSubmissionId);
+		M_log.debug(this + ".doAssignment_form(): actualGradeSubmissionId = " + actualGradeSubmissionId);
 		
 		String option = (String) params.getString("option");
 		String fromView = (String) state.getAttribute(FROM_VIEW);
@@ -11653,11 +11645,11 @@ public class AssignmentAction extends PagedResourceActionII
 	// added by Branden Visser - Check that the state is consistent
 	boolean checkSubmissionStateConsistency(SessionState state, String actualGradeSubmissionId) {
 		String stateGradeSubmissionId = (String)state.getAttribute(GRADE_SUBMISSION_SUBMISSION_ID);
-		Log.debug("chef", "checkSubmissionStateConsistency(): stateGradeSubmissionId = " + stateGradeSubmissionId);
+		M_log.debug(this + ".checkSubmissionStateConsistency(): stateGradeSubmissionId = " + stateGradeSubmissionId);
 		boolean is_good = stateGradeSubmissionId.equals(actualGradeSubmissionId);
 		if (!is_good) {
-		    Log.warn("chef", "checkSubissionStateConsistency(): State is inconsistent! Aborting grade save.");
-		    addAlert(state, rb.getString("grading.alert.multiTab"));
+			M_log.warn(this + ".checkSubissionStateConsistency(): State is inconsistent! Aborting grade save.");
+			addAlert(state, rb.getString("grading.alert.multiTab"));
 		}
 		return is_good;
 	}
@@ -17592,6 +17584,11 @@ public class AssignmentAction extends PagedResourceActionII
 									addAlert(state, rb.getFormattedMessage("review.file.not.accepted", new Object[]{contentReviewService.getServiceName(), getContentReviewAcceptedFileTypesMessage()}));
 									blockedByCRS = true;
 									// TODO: delete the file? Could we have done this check without creating it in the first place?
+								}
+								else if (!contentReviewService.isAcceptableSize(attachment))
+								{
+									addAlert(state, rb.getFormattedMessage("cr.size.warning", new Object[]{contentReviewService.getServiceName()}));
+									blockedByCRS = true;
 								}
 							}
 						}
