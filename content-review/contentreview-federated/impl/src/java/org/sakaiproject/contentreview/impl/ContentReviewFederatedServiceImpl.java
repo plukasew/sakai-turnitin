@@ -413,6 +413,16 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 		return false;
 	}
 
+	public boolean updateExternalId(String contentId, String externalId)
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+		{
+			return provider.updateExternalId(contentId, externalId);
+		}
+		return false;
+	}
+
 	public boolean updateExternalGrade(String contentId, String score){
 		ContentReviewService provider = getSelectedProvider();
 		if (provider != null)

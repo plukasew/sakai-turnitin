@@ -427,6 +427,14 @@ public interface ContentReviewService {
 	public boolean updateItemAccess(String contentId);
 
 	/**
+	 * Updates the externalId field of the contentreview_item with the specified contentId
+	 * @param contentId the contentId of the contentreview_item to be updated
+	 * @param externalId the ID supplied remotely by the content review servie for this item
+	 * @return whether the update was successful
+	 */
+	public boolean updateExternalId(String contentId, String externalId);
+
+	/**
 	 * Sets the grade for a submission content
 	 *
 	 * @param contentId

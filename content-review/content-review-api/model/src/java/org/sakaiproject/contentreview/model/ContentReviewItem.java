@@ -202,6 +202,18 @@ public class ContentReviewItem {
 		return externalId;
 	}
 
+	/**
+	 * NB: If this is a new content review item, this value will be inserted; but any changes will not be updated. You must use ContentReviewService.updateExternalId(String contentId, String externalId) to persist changes.
+	 * Rationale: Hibernate updates every attribute on the object; Turnitin's LTI integration uses asynchronous callbacks to update this attribute. So a race condition is common:
+	 * 1) ProcessQueue job retrieves ContentReviewItem from the db
+	 * 2) Submit to remote CRS
+	 * 3) Asynchronous callback from remote CRS; sets externalId, persists this ContentReviewItem in the db
+	 *     -Note this is a separate thread; working on a separate ContentReviewItem instance
+	 * 4) ProcessQueue job continues, marking the original ContentReviewItem's status to indicate that the call to TII was successful
+	 *     -*The externalID is still null on this instance, so it is overwritten, and our previous externalID is lost forever!*
+	 * Solution: set the externalId property in the ContentReviewItem.hbm.xml to insert="true" update="false"
+	 *     -the externalId will be inserted when first persisting the object, but ignored when updating the object unless we use an hql query
+	 */
 	public void setExternalId(String externalId) {
 		this.externalId = externalId;
 	}
