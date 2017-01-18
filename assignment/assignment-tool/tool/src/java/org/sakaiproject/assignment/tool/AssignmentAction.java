@@ -4580,7 +4580,9 @@ public class AssignmentAction extends PagedResourceActionII
 		context.put("honor_pledge_text", ServerConfigurationService.getString("assignment.honor.pledge", rb.getString("gen.honple2")));
 		
 		String contextString = (String) state.getAttribute(STATE_CONTEXT_STRING);
-		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state), assignment)){
+		Site site = getSiteOrNull(state);
+		if (allowReviewService && assignment.getContent().getAllowReviewService() && allowLTIReviewService(getSiteFromState(state), assignment)
+			&& m_securityService.unlock(AssignmentService.SECURE_GRADE_ASSIGNMENT_SUBMISSION, site.getReference())){
 			//put the LTI assignment link in context
 			String ltiLink = contentReviewService.getLTIAccess(assignment.getReference(), contextString);
 			M_log.debug("ltiLink " + ltiLink);
@@ -18149,6 +18151,22 @@ public class AssignmentAction extends PagedResourceActionII
 		{
 			M_log.warn("Site not found for id: " + siteId, e);
 			return Optional.empty();
+		}
+	}
+
+	/**
+	 * Convenience method to pull site from the state or null if not found
+	 */
+	private Site getSiteOrNull(SessionState state)
+	{
+		try
+		{
+			return SiteService.getSite((String) state.getAttribute(STATE_CONTEXT_STRING));
+		}
+		catch (IdUnusedException e)
+		{
+			M_log.warn("Site not found for id: " + STATE_CONTEXT_STRING, e);
+			return null;
 		}
 	}
 }	

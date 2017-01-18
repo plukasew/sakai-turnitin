@@ -36,6 +36,7 @@ import javax.servlet.http.HttpServletRequest;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONArray;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -446,9 +447,12 @@ public class SakaiBLTIUtil {
 		return theRole;
 	}
 
-	public static void addRoleInfo(Properties props, Properties lti2subst, String context, String roleMapProp)
+	public static void addRoleInfo(Properties props, Properties lti2subst, String context, String roleMapProp, String theRole)
 	{
-		String theRole = getRoleString(context);
+		if (StringUtils.isEmpty(theRole))
+		{
+			theRole = getRoleString(context);
+		}
 
 		setProperty(props,BasicLTIConstants.ROLES,theRole);
 		setProperty(lti2subst,LTI2Vars.MEMBERSHIP_ROLE,theRole);
@@ -456,22 +460,39 @@ public class SakaiBLTIUtil {
 		String realmId = SiteService.siteReference(context);
 		User user = null;
 		Map<String, String> roleMap = convertRoleMapPropToMap(roleMapProp);
-		try {
-			user = UserDirectoryService.getCurrentUser();
-			if ( user != null ) {
-				Role role = null;
-				String roleId = null;
-				AuthzGroup realm = ComponentManager.get(AuthzGroupService.class).getAuthzGroup(realmId);
-				if ( realm != null ) role = realm.getUserRole(user.getId());
-				if ( role != null ) roleId = role.getId();
-				if ( roleId != null && roleId.length() > 0 ) setProperty(props, "ext_sakai_role", roleId);
-				if ( roleMap.containsKey(roleId) ) {
-					setProperty(props, BasicLTIConstants.ROLES, roleMap.get(roleId));
-					setProperty(lti2subst, LTI2Vars.MEMBERSHIP_ROLE, roleMap.get(roleId));
+		if (!roleMap.isEmpty())
+		{
+			try 
+			{
+				user = UserDirectoryService.getCurrentUser();
+				if ( user != null )
+				{
+					Role role = null;
+					String roleId = null;
+					AuthzGroup realm = ComponentManager.get(AuthzGroupService.class).getAuthzGroup(realmId);
+					if ( realm != null )
+					{
+						role = realm.getUserRole(user.getId());
+					}
+					if ( role != null )
+					{
+						roleId = role.getId();
+					}
+					if ( roleId != null && roleId.length() > 0 )
+					{
+						setProperty(props, "ext_sakai_role", roleId);
+					}
+					if ( roleMap.containsKey(roleId) )
+					{
+						setProperty(props, BasicLTIConstants.ROLES, roleMap.get(roleId));
+						setProperty(lti2subst, LTI2Vars.MEMBERSHIP_ROLE, roleMap.get(roleId));
+					}
 				}
 			}
-		} catch (GroupNotDefinedException e) {
-			dPrint("SiteParticipantHelper.getExternalRealmId: site realm not found"+e.getMessage());
+			catch (GroupNotDefinedException e)
+			{
+				dPrint("SiteParticipantHelper.getExternalRealmId: site realm not found"+e.getMessage());
+			}
 		}
 
 		// Check if there are sections the user is part of (may be more than one)
@@ -516,7 +537,7 @@ public class SakaiBLTIUtil {
 		ToolConfiguration placement = SiteService.findTool(placementId);
 		Properties config = placement.getConfig();
 		String roleMapProp = toNull(getCorrectProperty(config, "rolemap", placement));
-		addRoleInfo(props, null, context, roleMapProp);
+		addRoleInfo(props, null, context, roleMapProp, null);
 		addSiteInfo(props, null, site);
 
 		// Add Placement Information
@@ -857,7 +878,9 @@ public class SakaiBLTIUtil {
 		}
 		addGlobalData(site, ltiProps, lti2subst, rb);
 		addSiteInfo(ltiProps, lti2subst, site);
-		addRoleInfo(ltiProps, lti2subst,  context, (String)tool.get("rolemap"));
+		String siteId = (String)tool.get(LTIService.LTI_SITE_ID);
+		String role = ltiService.getLTIRole(null, context, siteId);
+		addRoleInfo(ltiProps, lti2subst,  context, (String)tool.get("rolemap"), role);
 		addUserInfo(ltiProps, lti2subst, tool);
 
 
@@ -1385,7 +1408,7 @@ public class SakaiBLTIUtil {
 
 		addGlobalData(site, ltiProps, lti2subst, rb);
 		addSiteInfo(ltiProps, lti2subst, site);
-		addRoleInfo(ltiProps, lti2subst,  context, (String)tool.get("rolemap"));
+		addRoleInfo(ltiProps, lti2subst,  context, (String)tool.get("rolemap"), null);
 
 		int releasename = getInt(tool.get(LTIService.LTI_SENDNAME));
 		int releaseemail = getInt(tool.get(LTIService.LTI_SENDEMAILADDR));
