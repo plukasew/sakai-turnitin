@@ -1037,83 +1037,36 @@ public class SakaiBLTIUtil {
 			}
 		}
 
-		//substitute resources params and add the rest
-		if(custom.getProperty(BasicLTIConstants.RESOURCE_LINK_ID) != null){//TODO if allowReviewService prop y future prop for TII
-			addTIIproperties(ltiProps, custom);
-		}
-
+		//substitute resource params
+		overrideResourceLinkIfCustomized(ltiProps, custom);
 
 		// System.out.println("LAUNCH TYPE "+ (isLTI1 ? "LTI 1" : "LTI 2") );
 		return postLaunchHTML(toolProps, ltiProps, rb);
 	}
 
-	private static void addTIIproperties(Properties ltiProps, Properties custom){
-		M_log.debug("we have custom link id " + custom.getProperty(BasicLTIConstants.RESOURCE_LINK_ID));
-		setProperty(ltiProps,BasicLTIConstants.RESOURCE_LINK_ID,custom.getProperty(BasicLTIConstants.RESOURCE_LINK_ID));
-		if(custom.getProperty(BasicLTIConstants.RESOURCE_LINK_TITLE) != null){
-			M_log.debug("and we have custom link title " + custom.getProperty(BasicLTIConstants.RESOURCE_LINK_TITLE));
-			setProperty(ltiProps,BasicLTIConstants.RESOURCE_LINK_TITLE,custom.getProperty(BasicLTIConstants.RESOURCE_LINK_TITLE));
-		}
-		if(custom.getProperty("custom_startdate") != null){
-			M_log.debug("and we have custom start date " + custom.getProperty("custom_startdate"));
-			setProperty(ltiProps,"custom_startdate",custom.getProperty("custom_startdate"));
-		}
-		if(custom.getProperty("custom_duedate") != null){
-			M_log.debug("and we have custom due date " + custom.getProperty("custom_duedate"));
-			setProperty(ltiProps,"custom_duedate",custom.getProperty("custom_duedate"));
-		}
-		if(custom.getProperty("custom_feedbackreleasedate") != null){
-			M_log.debug("and we have custom feedback date " + custom.getProperty("custom_feedbackreleasedate"));
-			setProperty(ltiProps,"custom_feedbackreleasedate",custom.getProperty("custom_feedbackreleasedate"));
-		}
-		if(custom.getProperty(BasicLTIConstants.RESOURCE_LINK_DESCRIPTION) != null){
-			M_log.debug("and we have custom link description " + custom.getProperty(BasicLTIConstants.RESOURCE_LINK_DESCRIPTION));
-			setProperty(ltiProps,BasicLTIConstants.RESOURCE_LINK_DESCRIPTION,custom.getProperty(BasicLTIConstants.RESOURCE_LINK_DESCRIPTION));
-		}
-		if(custom.getProperty("custom_maxpoints") != null){
-			M_log.debug("and we have custom max points " + custom.getProperty("custom_maxpoints"));
-			setProperty(ltiProps,"custom_maxpoints",custom.getProperty("custom_maxpoints"));
-		}
-		if(custom.getProperty("custom_studentpapercheck") != null){
-			setProperty(ltiProps,"custom_studentpapercheck",custom.getProperty("custom_studentpapercheck"));
-		}
-		if(custom.getProperty("custom_journalcheck") != null){
-			setProperty(ltiProps,"custom_journalcheck",custom.getProperty("custom_journalcheck"));
-		}
-		if(custom.getProperty("custom_internetcheck") != null){
-			setProperty(ltiProps,"custom_internetcheck",custom.getProperty("custom_internetcheck"));
-		}
-		if(custom.getProperty("custom_institutioncheck") != null){
-			setProperty(ltiProps,"custom_institutioncheck",custom.getProperty("custom_institutioncheck"));
-		}
-		if(custom.getProperty("custom_allow_non_or_submissions") != null){
-			setProperty(ltiProps,"custom_allow_non_or_submissions",custom.getProperty("custom_allow_non_or_submissions"));
-		}
-		if(custom.getProperty("custom_exclude_type") != null){
-			setProperty(ltiProps,"custom_exclude_type",custom.getProperty("custom_exclude_type"));
-		}
-		if(custom.getProperty("custom_exclude_value") != null){
-			setProperty(ltiProps,"custom_exclude_value",custom.getProperty("custom_exclude_value"));
-		}
-		if(custom.getProperty("custom_late_accept_flag") != null){
-			setProperty(ltiProps,"custom_late_accept_flag",custom.getProperty("custom_late_accept_flag"));
-		}
-		if(custom.getProperty("custom_report_gen_speed") != null){
-			setProperty(ltiProps,"custom_report_gen_speed",custom.getProperty("custom_report_gen_speed"));
-		}
-		if(custom.getProperty("custom_s_view_reports") != null){
-			setProperty(ltiProps,"custom_s_view_reports",custom.getProperty("custom_s_view_reports"));
-		}
-		if(custom.getProperty("custom_submit_papers_to") != null){
-			setProperty(ltiProps,"custom_submit_papers_to",custom.getProperty("custom_submit_papers_to"));
-		}
-		if(custom.getProperty("custom_use_biblio_exclusion") != null){
-			setProperty(ltiProps,"custom_use_biblio_exclusion",custom.getProperty("custom_use_biblio_exclusion"));
-		}
-		if(custom.getProperty("custom_use_quoted_exclusion") != null){
-			setProperty(ltiProps,"custom_use_quoted_exclusion",custom.getProperty("custom_use_quoted_exclusion"));
+	private static void overrideResourceLinkIfCustomized(Properties ltiProps, Properties custom)
+	{
+		copyProperty(ltiProps, custom, BasicLTIConstants.RESOURCE_LINK_ID);
+		copyProperty(ltiProps, custom, BasicLTIConstants.RESOURCE_LINK_TITLE);
+		copyProperty(ltiProps, custom, BasicLTIConstants.RESOURCE_LINK_DESCRIPTION);
+	}
+
+	/**
+	 * Copies a property from source propreties to destination properties
+	 * Will overwrite properties in the destination unless the source property is null
+	 * @param dest the Properties instance we're copying the value into
+	 * @param source the Properties instance we're copying the value from
+	 * @param key the key of the property we're copying
+	 */
+	private static void copyProperty(Properties dest, Properties source, String key)
+	{
+		String value = source.getProperty(key);
+		if (!StringUtils.isBlank(value))
+		{
+			dest.setProperty(key, value);
 		}
 	}
+
 	/**
 	 * An LTI 2.0 Registration launch
 	 *
