@@ -6772,9 +6772,9 @@ public class AssignmentAction extends PagedResourceActionII
 						}
 
 						// SAK-26322 - add inline as an attachment for the content review service
-						if (a.getContent().getAllowReviewService() && !isHtmlEmpty(text) && post)
+						if (allowReviewService && !isHtmlEmpty(text) && post)
 						{
-							prepareInlineForContentReview(text, sEdit, state, u, isPreviousSubmissionTime);
+							prepareInlineForContentReview(text, sEdit, state, u, isPreviousSubmissionTime, a.getContent().getAllowReviewService());
 						}
 
 						if (submitter != null) {
@@ -6827,9 +6827,9 @@ public class AssignmentAction extends PagedResourceActionII
 							List attachments = (List) state.getAttribute(ATTACHMENTS);
 
 							// SAK-26322 - add inline as an attachment for the content review service
-							if (a.getContent().getAllowReviewService() && !isHtmlEmpty(text) && post)
+							if (allowReviewService && !isHtmlEmpty(text) && post)
 							{
-								prepareInlineForContentReview(text, edit, state, u, false);
+								prepareInlineForContentReview(text, edit, state, u, false, a.getContent().getAllowReviewService());
 							}
 							
 							if (attachments != null)
@@ -6904,8 +6904,16 @@ public class AssignmentAction extends PagedResourceActionII
 
 	/**
 	 * Takes the inline submission, prepares it as an attachment to the submission and queues the attachment with the content review service
+	 * @param text the inline part of the submission
+	 * @param edit the submission
+	 * @param state
+	 * @param onBehalfOf the user that this submission is for
+	 * @param isResubmission true if this is a resubmission
+	 * @param doQuue whether the inline attachment should be queued to the ContentReviewService.
+	 *     If false, the file will still be created in case the instructor enables turnitin on the assignment in the future,
+	 *     at which point it will be queued in the sync'ing process.
 	 */
-	private void prepareInlineForContentReview(String text, AssignmentSubmissionEdit edit, SessionState state, User student, boolean isResubmission)
+	private void prepareInlineForContentReview(String text, AssignmentSubmissionEdit edit, SessionState state, User student, boolean isResubmission, boolean doQueue)
 	{
 		//We will be replacing the inline submission's attachment
 		//firstly, disconnect any existing attachments with AssignmentSubmission.PROP_INLINE_SUBMISSION set
@@ -6988,7 +6996,8 @@ public class AssignmentAction extends PagedResourceActionII
 			ContentResource attachment = m_contentHostingService.addAttachmentResource(resourceId, siteId, toolName, contentType, contentStream, inlineProps);
 			// TODO: need to put this file in some kind of list to improve performance with web service impls of content-review service
 			String contentUserId = isOnBehalfOfStudent ? student.getId() : currentUser.getId();
-			if(!isResubmission){
+			if(doQueue)
+			{
 				contentReviewService.queueContent(contentUserId, null, edit.getAssignment().getReference(), Arrays.asList(attachment), edit.getId(), isResubmission);
 			}
 

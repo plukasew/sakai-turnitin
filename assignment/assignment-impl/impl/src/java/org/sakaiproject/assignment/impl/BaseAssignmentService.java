@@ -13096,7 +13096,7 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 				//SAK-26322
 				List<ContentResource> resources = getAllAcceptableAttachments(attachments, allowAnyFile);
 				Assignment ass = this.getAssignment();			
-				if (ass != null)
+				if (ass != null && ass.getContent().getAllowReviewService())
 				{
 					//Group submissions store the group ID as the submitterId, so find an actual user ID
 					String userId = null;
