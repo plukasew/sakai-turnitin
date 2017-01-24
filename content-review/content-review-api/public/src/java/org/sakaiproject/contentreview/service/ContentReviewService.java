@@ -479,4 +479,18 @@ public interface ContentReviewService {
 	 */
 	public void migrateLtiXml();
 
+	/**
+	 * Returns the implementation-specific localized error message for an invalid assignment configuration
+	 * @return the localized message indicating the problem with the content review configuration for this assignment
+	 */
+	public String getLocalizedInvalidAsnConfigError();
+
+	/**
+	 * Returns true if the Sakai activity is configured correctly for this content review service
+	 * @param toolId the Sakai tool id that the activity belongs to (ex: sakai.assignment.grades)
+	 * @param activityId the unique identifier for the activity (ex: an assignment id)
+	 * @return true if the given activity is configured correctly for use with the review service
+	 */
+	public boolean validateActivityConfiguration(String toolId, String activityId);
+
 }

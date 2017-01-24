@@ -488,6 +488,9 @@
 									#end 
 								#end 
 							</a>
+							#if ($!misconfiguredReviewService)
+							<i alt="$crInvalidAsnConfig" title="$crInvalidAsnConfig" class="fa fa-exclamation-triangle errorStyle"></i>
+							#end
 						</td>
 					#end
 					<th id="gradereleased">
@@ -717,10 +720,12 @@
 										<div>
 											#set ($props = $reviewResult.getContentResource().Properties)
 											<span class="reportIcon">
-											#if ($reviewResult.getReviewReport().equals("Error"))
+											#if ($!misconfiguredReviewService)
+												<i alt="$crInvalidAsnConfig" title="$crInvalidAsnConfig" class="fa fa-exclamation-triangle errorStyle"></i>
+											#elseif ($reviewResult.getReviewReport().equals("Error"))
 												<i alt="$reviewResult.getReviewError()" title="$reviewResult.getReviewError()" class="fa fa-exclamation-triangle errorStyle"></i>
 											#else
-												<a href="$reviewResult.getReviewReport()" target="_blank">
+												<a href="$reviewResult.getReviewReport()" target="_blank" rel="noreferrer">
 													<i alt="$tlang.getString("review.originality.alt") = $reviewResult.getReviewScore() %" title="$tlang.getString("review.originality.alt") = $reviewResult.getReviewScore() %" class="fa fa-flag flagStyle" style="color:$reviewResult.getReviewIconColor() !important"></i>
 												</a>
 											#end

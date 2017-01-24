@@ -471,4 +471,27 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 		}
 	}
 
+	@Override
+	public String getLocalizedInvalidAsnConfigError()
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+		{
+			return provider.getLocalizedInvalidAsnConfigError();
+		}
+
+		return "";
+	}
+
+	@Override
+	public boolean validateActivityConfiguration(String toolId, String activityId)
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+		{
+			return provider.validateActivityConfiguration(toolId, activityId);
+		}
+
+		return false;
+	}
 }
