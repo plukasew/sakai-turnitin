@@ -4391,6 +4391,11 @@ public class AssignmentAction extends PagedResourceActionII
 			assignment_resubmission_option_into_state(assignment, null, state);
 			putTimePropertiesInContext(context, state, "Resubmit", ALLOW_RESUBMIT_CLOSEMONTH, ALLOW_RESUBMIT_CLOSEDAY, ALLOW_RESUBMIT_CLOSEYEAR, ALLOW_RESUBMIT_CLOSEHOUR, ALLOW_RESUBMIT_CLOSEMIN);
 			assignment_resubmission_option_into_context(context, state);
+
+			// validate content review service configuration for this assignment so we can provide appropriate messaging
+			// in the UI if there is a problem
+			context.put("misconfiguredReviewService", !contentReviewService.validateActivityConfiguration("sakai.assignment.grades", assignment.getId()));
+			context.put("crInvalidAsnConfig", contentReviewService.getLocalizedInvalidAsnConfigError());
 		}
 
 		TaggingManager taggingManager = (TaggingManager) ComponentManager
