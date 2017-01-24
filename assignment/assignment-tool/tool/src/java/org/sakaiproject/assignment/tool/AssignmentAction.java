@@ -6273,8 +6273,11 @@ public class AssignmentAction extends PagedResourceActionII
 				if (state.getAttribute(ALLOW_RESUBMIT_CLOSEYEAR) != null)
 				{
 					// get resubmit time
-					Time closeTime = getTimeFromState(state, ALLOW_RESUBMIT_CLOSEMONTH, ALLOW_RESUBMIT_CLOSEDAY, ALLOW_RESUBMIT_CLOSEYEAR, ALLOW_RESUBMIT_CLOSEHOUR, ALLOW_RESUBMIT_CLOSEMIN);
-					pEdit.addProperty(AssignmentSubmission.ALLOW_RESUBMIT_CLOSETIME, String.valueOf(closeTime.getTime()));
+					Time extension = getTimeFromState(state, ALLOW_RESUBMIT_CLOSEMONTH, ALLOW_RESUBMIT_CLOSEDAY, ALLOW_RESUBMIT_CLOSEYEAR, ALLOW_RESUBMIT_CLOSEHOUR, ALLOW_RESUBMIT_CLOSEMIN);
+					pEdit.addProperty(AssignmentSubmission.ALLOW_RESUBMIT_CLOSETIME, String.valueOf(extension.getTime()));
+
+					// TII-245 - Tell the CRS about this extension
+					handleIndividualExtensionInContentReview(sEdit, extension, state);
 				}
 				else
 				{
@@ -8653,14 +8656,14 @@ public class AssignmentAction extends PagedResourceActionII
 				//assume creating the assignment with the content review service will be successful
 				state.setAttribute("contentReviewSuccess", Boolean.TRUE);
 
+				Time resubmitCloseTime = getTimeFromState(state, ALLOW_RESUBMIT_CLOSEMONTH, ALLOW_RESUBMIT_CLOSEDAY, ALLOW_RESUBMIT_CLOSEYEAR, ALLOW_RESUBMIT_CLOSEHOUR, ALLOW_RESUBMIT_CLOSEMIN);
+
 				// commit the changes to AssignmentContent object
-				//commitAssignmentContentEdit(state, ac, a.getReference(), title, submissionType,useReviewService,allowStudentViewReport, gradeType, gradePoints, description, checkAddHonorPledge, attachments, submitReviewRepo, generateOriginalityReport, checkTurnitin, checkInternet, checkPublications, checkInstitution, excludeBibliographic, excludeQuoted, excludeType, excludeValue, openTime, dueTime, closeTime, hideDueDate);
-				commitAssignmentContentEdit(state, ac, a.getReference(), title, submissionType,useReviewService,allowStudentViewReport,allowStudentViewExternalGrade, gradeType, gradePoints, description, checkAddHonorPledge, attachments, submitReviewRepo, generateOriginalityReport, checkTurnitin, checkInternet, checkPublications, checkInstitution, excludeBibliographic, excludeQuoted, excludeType, excludeValue, allowAnyFile, openTime, dueTime, closeTime, hideDueDate);
+				commitAssignmentContentEdit(state, ac, a.getReference(), title, submissionType,useReviewService,allowStudentViewReport,allowStudentViewExternalGrade, gradeType, gradePoints, description, checkAddHonorPledge, attachments, submitReviewRepo, generateOriginalityReport, checkTurnitin, checkInternet, checkPublications, checkInstitution, excludeBibliographic, excludeQuoted, excludeType, excludeValue, allowAnyFile, openTime, dueTime, closeTime, resubmitCloseTime, hideDueDate, a.getId());
 				
 				// set the Assignment Properties object
 				ResourcePropertiesEdit aPropertiesEdit = a.getPropertiesEdit();
 				oAssociateGradebookAssignment = aPropertiesEdit.getProperty(AssignmentService.PROP_ASSIGNMENT_ASSOCIATE_GRADEBOOK_ASSIGNMENT);
-				Time resubmitCloseTime = getTimeFromState(state, ALLOW_RESUBMIT_CLOSEMONTH, ALLOW_RESUBMIT_CLOSEDAY, ALLOW_RESUBMIT_CLOSEYEAR, ALLOW_RESUBMIT_CLOSEHOUR, ALLOW_RESUBMIT_CLOSEMIN);
 
 				// SAK-17606
 				editAssignmentProperties(a, checkAddDueTime, checkAutoAnnounce, addtoGradebook, associateGradebookAssignment, allowResubmitNumber, aPropertiesEdit, post, resubmitCloseTime, checkAnonymousGrading);
@@ -9763,7 +9766,7 @@ public class AssignmentAction extends PagedResourceActionII
 		}
 	}
 
-	private void commitAssignmentContentEdit(SessionState state, AssignmentContentEdit ac, String assignmentRef, String title, int submissionType,boolean useReviewService, boolean allowStudentViewReport, boolean allowStudentViewExternalGrade, int gradeType, String gradePoints, String description, String checkAddHonorPledge, List attachments, String submitReviewRepo, String generateOriginalityReport, boolean checkTurnitin, boolean checkInternet, boolean checkPublications, boolean checkInstitution, boolean excludeBibliographic, boolean excludeQuoted, int excludeType, int excludeValue, boolean allowAnyFile, Time openTime, Time dueTime, Time closeTime, boolean hideDueDate)
+	private void commitAssignmentContentEdit(SessionState state, AssignmentContentEdit ac, String assignmentRef, String title, int submissionType,boolean useReviewService, boolean allowStudentViewReport, boolean allowStudentViewExternalGrade, int gradeType, String gradePoints, String description, String checkAddHonorPledge, List attachments, String submitReviewRepo, String generateOriginalityReport, boolean checkTurnitin, boolean checkInternet, boolean checkPublications, boolean checkInstitution, boolean excludeBibliographic, boolean excludeQuoted, int excludeType, int excludeValue, boolean allowAnyFile, Time openTime, Time dueTime, Time closeTime, Time resubmitCloseTime, boolean hideDueDate, String assignmentId)
 	{
 		ac.setTitle(title);
 		ac.setInstructions(description);
@@ -9828,7 +9831,7 @@ public class AssignmentAction extends PagedResourceActionII
 		AssignmentService.commitEdit(ac);
 		
 		if(ac.getAllowReviewService()){
-			if (!createTIIAssignment(ac, assignmentRef, openTime, dueTime, closeTime, state))
+			if (!syncTIIAssignment(ac, assignmentRef, openTime, dueTime, closeTime, resubmitCloseTime, null, state))
 			{
 				state.setAttribute("contentReviewSuccess", Boolean.FALSE);
 			}
@@ -9836,8 +9839,8 @@ public class AssignmentAction extends PagedResourceActionII
 		
 	}
 	
-	public boolean createTIIAssignment(AssignmentContentEdit assign, String assignmentRef, Time openTime, Time dueTime, Time closeTime, SessionState state) {
-        Map opts = new HashMap();
+	public boolean syncTIIAssignment(AssignmentContent assign, String assignmentRef, Time openTime, Time dueTime, Time closeTime, Time resubmitCloseTime, Date extension, SessionState state) {
+        Map<String, Object> opts = new HashMap<>();
         
         opts.put("submit_papers_to", assign.getSubmitReviewRepo());
 
@@ -9891,9 +9894,15 @@ public class AssignmentAction extends PagedResourceActionII
         SimpleDateFormat dform = ((SimpleDateFormat) DateFormat.getDateInstance());
         dform.applyPattern("yyyy-MM-dd HH:mm:ss");
         opts.put("dtstart", dform.format(openTime.getTime()));  // old Turnitin Sakai API integration
+        // TII-245 - use latest date for TII's due date
+        Time latest = closeTime;
+        if (resubmitCloseTime != null && resubmitCloseTime.after(closeTime))
+        {
+            latest = resubmitCloseTime;
+        }
         opts.put("dtdue", dform.format(dueTime.getTime()));  // old Turnitin Sakai API integration
         opts.put("timestampOpen", openTime.getTime());  // new Turnitin LTI integration
-        opts.put("timestampDue", dueTime.getTime());  // new Turnitin LTI integration
+        opts.put("timestampDue", latest.getTime());  // new Turnitin LTI integration
         opts.put("title", assign.getTitle());
         opts.put("instructions", assign.getInstructions());
         opts.put("assignmentContentId", assign.getReference());
@@ -9906,7 +9915,14 @@ public class AssignmentAction extends PagedResourceActionII
         	opts.put("attachments", attachments);
         }
         try {
-            contentReviewService.createAssignment(assign.getContext(), assignmentRef, opts);
+            if (extension == null)
+            {
+                contentReviewService.createAssignment(assign.getContext(), assignmentRef, opts);
+            }
+            else
+            {
+                contentReviewService.offerIndividualExtension(assign.getContext(), assignmentRef, opts, extension);
+            }
 			return true;
         } catch (Exception e) {
             M_log.error(e);
@@ -9918,6 +9934,28 @@ public class AssignmentAction extends PagedResourceActionII
 		return false;
     }
 	
+	/**
+	 * Tells the content review service that we're offering an extension to an individual student; content review service will decide what to do with this
+	 */
+	private void handleIndividualExtensionInContentReview(AssignmentSubmission sub, Time extension, SessionState state)
+	{
+		Assignment a = sub.getAssignment();
+		if (a != null)
+		{
+			// Assignment open / due / close dates are easy to access, but the assignment level 'resubmit until' is a base64'd ResourceProperty
+			Time asnResubmitCloseTime = null;
+			ResourceProperties props = a.getProperties();
+			if (props != null)
+			{
+				String strResubmitCloseTime = props.getProperty(AssignmentSubmission.ALLOW_RESUBMIT_CLOSETIME);
+				if (!StringUtils.isBlank(strResubmitCloseTime))
+				{
+					asnResubmitCloseTime = TimeService.newTime(Long.parseLong(strResubmitCloseTime));
+				}
+			}
+			syncTIIAssignment(a.getContent(), a.getReference(), a.getOpenTime(), a.getDueTime(), a.getCloseTime(), asnResubmitCloseTime, new Date(extension.getTime()), state);
+		}
+	}
 
 	/**
 	 * reorderAssignments
@@ -17381,8 +17419,11 @@ public class AssignmentAction extends PagedResourceActionII
 							if (state.getAttribute(ALLOW_RESUBMIT_CLOSEYEAR) != null)
 							{
 								// get resubmit time
-								Time closeTime = getTimeFromState(state, ALLOW_RESUBMIT_CLOSEMONTH, ALLOW_RESUBMIT_CLOSEDAY, ALLOW_RESUBMIT_CLOSEYEAR, ALLOW_RESUBMIT_CLOSEHOUR, ALLOW_RESUBMIT_CLOSEMIN);
-								pEdit.addProperty(AssignmentSubmission.ALLOW_RESUBMIT_CLOSETIME, String.valueOf(closeTime.getTime()));
+								Time extension = getTimeFromState(state, ALLOW_RESUBMIT_CLOSEMONTH, ALLOW_RESUBMIT_CLOSEDAY, ALLOW_RESUBMIT_CLOSEYEAR, ALLOW_RESUBMIT_CLOSEHOUR, ALLOW_RESUBMIT_CLOSEMIN);
+								pEdit.addProperty(AssignmentSubmission.ALLOW_RESUBMIT_CLOSETIME, String.valueOf(extension.getTime()));
+
+								// TII-245
+								handleIndividualExtensionInContentReview(submissionEdit, extension, state);
 							}
 							else
 							{

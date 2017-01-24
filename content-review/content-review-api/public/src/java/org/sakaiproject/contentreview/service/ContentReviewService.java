@@ -369,7 +369,14 @@ public interface ContentReviewService {
 	 * @throws SubmissionException
 	 * @throws TransientSubmissionException
 	 */
-	public void createAssignment(String siteId, String taskId, Map extraAsnnOpts)
+	public void createAssignment(String siteId, String taskId, Map<String, Object> extraAsnnOpts)
+	throws SubmissionException, TransientSubmissionException;
+
+	/**
+	 * Syncs the assignment with consideration for a student's 'resubmit accept until' date. Otherwise, behavior is identical to createAssignment()
+	 * @param extensionDate date of the extension
+	 */
+	public void offerIndividualExtension(String siteId, String asnId, Map<String, Object> extraAsnOpts, Date extensionDate)
 	throws SubmissionException, TransientSubmissionException;
 
 	/**

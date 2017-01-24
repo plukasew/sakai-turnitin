@@ -138,12 +138,21 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 			provider.checkForReports();	
 	}
 
-	public void createAssignment(String arg0, String arg1, Map arg2)
+	public void createAssignment(String arg0, String arg1, Map<String, Object> arg2)
 		throws SubmissionException, TransientSubmissionException {
 		ContentReviewService provider = getSelectedProvider();
 		if (provider != null)
 			provider.createAssignment(arg0,arg1,arg2);
-		
+	}
+
+	public void offerIndividualExtension(String siteId, String asnId, Map<String, Object> extraAsnOpts, Date extensionDate)
+		throws SubmissionException, TransientSubmissionException
+	{
+		ContentReviewService provider = getSelectedProvider();
+		if (provider != null)
+		{
+			provider.offerIndividualExtension(siteId, asnId, extraAsnOpts, extensionDate);
+		}
 	}
 
 	public List<ContentReviewItem> getAllContentReviewItems(String arg0,
