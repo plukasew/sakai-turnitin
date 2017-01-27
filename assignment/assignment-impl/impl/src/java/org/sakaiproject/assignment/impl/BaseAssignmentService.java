@@ -158,6 +158,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 	// SAK-29314
 	private static final String SUBMISSION_ATTR_IS_USER_SUB = "isUserSubmission";
 
+	private static final String SUBMISSION_ATTR_SUBMITTED_FOR_GROUP_BY_USER_ID = "submittedForGroupByUserId";
+
 //	spring service injection
 	
 	
@@ -10714,6 +10716,9 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 		// SAK-29314
 		protected boolean m_isUserSubmission;
 		
+		// the user making the submission on behalf of a group
+		protected String m_submittedForGroupByUserId;
+
 		protected Assignment m_asn;
 		/*
 		 * Helper method to add elements or attributes to a list
@@ -10768,68 +10773,61 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 				M_log.debug(this + " getReviewScore No attachments submitted.");
 				return -2;
 			}
-			else
-			{
-				//we may have already retrived this one
-				if (m_reviewScore != null && m_reviewScore > -1) {
-					M_log.debug("returning stored value of " + m_reviewScore);
-					return m_reviewScore.intValue();
-				}
 
-				boolean allowAnyFile = this.getAssignment().getContent().isAllowAnyFile();
-				ContentResource cr = getFirstAcceptableAttachement(allowAnyFile);
-				if (cr == null )
-				{
-					M_log.debug(this + " getReviewScore No suitable attachments found in list");
+			//we may have already retrived this one
+			if (m_reviewScore != null && m_reviewScore > -1) {
+				M_log.debug("returning stored value of " + m_reviewScore);
+				return m_reviewScore;
+			}
+
+			boolean allowAnyFile = this.getAssignment().getContent().isAllowAnyFile();
+			ContentResource cr = getFirstAcceptableAttachement(allowAnyFile);
+			if (cr == null )
+			{
+				M_log.debug(this + " getReviewScore No suitable attachments found in list");
+				return -2;
+			}
+
+			try {
+				//we need to find the first attachment the CR will accept
+				String contentId = cr.getId();
+				M_log.debug(this + " getReviewScore checking for score for content: " + contentId);
+
+				Long status = contentReviewService.getReviewStatus(contentId);
+				if (status != null && (status.equals(ContentReviewItem.NOT_SUBMITTED_CODE) || status.equals(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE)))  {
+					M_log.debug(this + " getReviewStatus returned a status of: " + status);
 					return -2;
 				}
 
+				int score = contentReviewService.getReviewScore(contentId, getAssignment().getReference(), getContentReviewSubmitterId());
+				m_reviewScore = score;
+				M_log.debug(this + " getReviewScore CR returned a score of: " + score);
+				return score;
 
-
+			} 
+			catch (QueueException cie) {
+				//should we add the item
 				try {
-					//we need to find the first attachment the CR will accept
-					String contentId = cr.getId();
-					M_log.debug(this + " getReviewScore checking for score for content: " + contentId);
+						M_log.debug(this + " getReviewScore Item is not in queue we will try add it");
+						try {
+							contentReviewService.queueContent(getContentReviewSubmitterId(), this.getContext(), getAssignment().getReference(), Arrays.asList(cr), this.getId(), false);
+						}
+						catch (QueueException qe) {
+							M_log.warn(" getReviewScore Unable to queue content with content review Service: " + qe.getMessage());
+						}
 
-                    Long status = contentReviewService.getReviewStatus(contentId);
-                    if (status != null && (status.equals(ContentReviewItem.NOT_SUBMITTED_CODE) || status.equals(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE)))  {
-                        M_log.debug(this + " getReviewStatus returned a status of: " + status);
-                        return -2;
-                    }
 
-					int score = contentReviewService.getReviewScore(contentId, getAssignment().getReference(), getContentReviewSubmitterId(cr));
-					m_reviewScore = score;
-					M_log.debug(this + " getReviewScore CR returned a score of: " + score);
-					return score;
-						
-				} 
-				catch (QueueException cie) {
-					//should we add the item
-					try {
-							M_log.debug(this + " getReviewScore Item is not in queue we will try add it");
-							try {
-								contentReviewService.queueContent(getContentReviewSubmitterId(cr), this.getContext(), getAssignment().getReference(), Arrays.asList(cr), this.getId(), false);
-							}
-							catch (QueueException qe) {
-								M_log.warn(" getReviewScore Unable to queue content with content review Service: " + qe.getMessage());
-							}
-								
-							
-						
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-					return -1;
-					
+
+				} catch (Exception e) {
+					e.printStackTrace();
 				}
-				catch (Exception e) {
-					M_log.warn(this + " getReviewScore " + e.getMessage());
-					return -1;
-				}
-					
+				return -1;
+
 			}
-	
-			
+			catch (Exception e) {
+				M_log.warn(this + " getReviewScore " + e.getMessage());
+				return -1;
+			}
 		}
 
 		/**
@@ -10866,7 +10864,7 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 					return -2;
 				}
 
-				int score = contentReviewService.getReviewScore(contentId, getAssignment().getReference(), getContentReviewSubmitterId(cr));
+				int score = contentReviewService.getReviewScore(contentId, getAssignment().getReference(), getContentReviewSubmitterId());
 				// TODO: delete the following line if there will be no repercussions:
 				m_reviewScore = score;
 				M_log.debug(this + " getReviewScore(ContentResource) CR returned a score of: " + score);
@@ -10880,7 +10878,7 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 					M_log.debug(" getReviewScore(ContentResource) Item is not in queue we will try to add it");
 					try
 					{
-						contentReviewService.queueContent(getContentReviewSubmitterId(cr), this.getContext(), getAssignment().getReference(), Arrays.asList(cr), this.getId(), false);
+						contentReviewService.queueContent(getContentReviewSubmitterId(), this.getContext(), getAssignment().getReference(), Arrays.asList(cr), this.getId(), false);
 					}
 					catch (QueueException qe)
 					{
@@ -10889,7 +10887,7 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 				}
 				catch (Exception e)
 				{
-					e.printStackTrace();
+					M_log.error(e);
 				}
 				return -1;
 			}
@@ -10900,17 +10898,19 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 			}
 		}
 		
-		public String getContentReviewSubmitterId(ContentResource cr){
-			//Group submissions store the group ID as the submitterId, so find an actual user ID
-			String userId = null;
-			if(cr != null && getAssignment().isGroup() && cr.getProperties() != null
-					&& StringUtils.isNotEmpty(cr.getProperties().getProperty(ResourceProperties.PROP_CREATOR))){
-				//this isn't the best solution since the instructor could have submitted on behalf of the group, resulting in getting the instructors ID
-				userId = cr.getProperties().getProperty(ResourceProperties.PROP_CREATOR);
-			}else{						
-				userId = this.getSubmitterId();
+		/**
+		 * Returns the user that should be considered the submitter for purposes of content review. For group assignments,
+		 * this method may return empty string if an appropriate submitter cannot be determined. This may happen with legacy submissions
+		 * made prior to the introduction of the getSubmittedForGroupByUserId method.
+		 * @return the user uuid for the submitter, or empty string if submitter cannot be determined
+		 */
+		public String getContentReviewSubmitterId(){
+			//Group submissions store the group ID as the submitterId, but in this case the submitting user is stored in m_submittedForGroupByUserId
+			if (m_asn.isGroup())
+			{
+				return m_submittedForGroupByUserId;
 			}
-			return userId;
+			return m_submitterId;
 		}
 
 		public String getReviewReport() {
@@ -11187,7 +11187,7 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 		}
 
 		/**
-		 * Convenience method to retreive the lastError for a content review item, given the content resouece ID
+		 * Convenience method to retrieve the lastError for a content review item, given the content resource ID
 		 * @param contentID the content resource ID of the content review item we're trying to access
 		 * @return a formatted String containing the lastError message for the content review item asked for
 		 */
@@ -11332,6 +11332,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 			{
 				m_graded = Boolean.valueOf(graded).booleanValue();
 			}
+
+			m_submittedForGroupByUserId = "";
 		}
 
 		
@@ -11501,7 +11503,7 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
                 m_reviewError = this.getReviewError();
 			}
 			
-			
+			m_submittedForGroupByUserId = Objects.toString(el.getAttribute(SUBMISSION_ATTR_SUBMITTED_FOR_GROUP_BY_USER_ID), "");
 			
 			M_log.debug(" BaseAssignmentSubmission: LEAVING STORAGE CONSTRUCTOR");
 
@@ -11648,6 +11650,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 								will likely return false negatives.
 							*/
 							getIsUserSubmission( attributes.getValue( SUBMISSION_ATTR_IS_USER_SUB ) );
+							
+							m_submittedForGroupByUserId = attributes.getValue(SUBMISSION_ATTR_SUBMITTED_FOR_GROUP_BY_USER_ID);
 
 							entity = thisEntity;
 						}
@@ -11713,6 +11717,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 
 			// SAK-29314
 			submission.setAttribute(SUBMISSION_ATTR_IS_USER_SUB, getBoolString(m_isUserSubmission));
+			
+			submission.setAttribute(SUBMISSION_ATTR_SUBMITTED_FOR_GROUP_BY_USER_ID, m_submittedForGroupByUserId);
 
 			if (M_log.isDebugEnabled()) M_log.debug(this + " BaseAssignmentSubmission: SAVED REGULAR PROPERTIES");
 
@@ -11838,6 +11844,8 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 
 			// SAK-29314
 			m_isUserSubmission = submission.isUserSubmission();
+
+			m_submittedForGroupByUserId = submission.getSubmittedForGroupByUserId();
 		}
 
 		/**
@@ -12108,6 +12116,16 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 			return rv;
 		}
 		
+		/**
+		 * Returns the uuid of the user who made this submission on behalf of a group. If this submission is not
+		 * for a group, will return empty string
+		 * @return the id of the user who made the submission, or empty string if not a group submission
+		 */
+		public String getSubmittedForGroupByUserId()
+		{
+			return m_submittedForGroupByUserId;
+		}
+
 		/**
 		 * Set the time at which this response was submitted; null signifies the response is unsubmitted.
 		 * 
@@ -12897,6 +12915,16 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 		{
 			m_submitters.clear();
 		}
+		
+		/**
+		 * Sets the uuid of the user who made this submission on behalf of a group
+		 * @param userId the user's uuid
+		 */
+		@Override
+		public void setSubmittedForGroupByUserId(String userId)
+		{
+			m_submittedForGroupByUserId = StringUtils.trimToEmpty(userId);
+		}
 
 		/**
 		 * Set the time at which this response was submitted; setting it to null signifies the response is unsubmitted.
@@ -13085,120 +13113,51 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 		{
 			if (lastmod != null) m_timeLastModified = lastmod;
 		}
-		
-		
-		
-		public void postAttachment(List attachments){
-			//Send the attachment to the review service
 
-			try {
-				boolean allowAnyFile = this.getAssignment().getContent().isAllowAnyFile();
-				//SAK-26322
-				List<ContentResource> resources = getAllAcceptableAttachments(attachments, allowAnyFile);
-				Assignment ass = this.getAssignment();			
-				if (ass != null && ass.getContent().getAllowReviewService())
-				{
-					//Group submissions store the group ID as the submitterId, so find an actual user ID
-					String userId = null;
-					if(getAssignment().isGroup()){
-						//first first user id from an attachment
-						for(ContentResource cr : resources){
-							userId = this.getContentReviewSubmitterId(cr);
-							if(userId != null){
-								break;
-							}
-						}
-					}else{						
-						userId = this.getContentReviewSubmitterId(null);
-					}
-					contentReviewService.queueContent(userId, this.getContext(), ass.getReference(), resources, this.getId(), false);
-				}
-				else
+		/**
+		 * Submits the given attachments for processing by the content review service.
+		 * 
+		 * @param attachments the attachments to be queued for content review
+		 * @param isResubmission true if this is a resubmission
+		 * @param ownerId the user who owns the attachments for purposes of content review. For a normal individual or group submission,
+		 * this should be the user who makes the submission. If submitting on behalf of a student, this should be the student.
+		 */
+		@Override
+		public void submitContentToReviewService(List<Reference> attachments, boolean isResubmission, String ownerId)
+		{
+			try
+			{
+				Assignment asn = getAssignment();
+				if (asn == null)
 				{
 					// error, assignment couldn't be found. Log the error
-					M_log.debug(this + " BaseAssignmentSubmissionEdit postAttachment: Unable to find assignment associated with submission id= " + this.m_id + " and assignment id=" + this.m_assignment);
+					M_log.debug(" Unable to find assignment associated with submission id= " + m_id + " and assignment id=" + m_assignment);
+					return;
 				}
+				AssignmentContent ac = asn.getContent();
+				if (ac == null || !ac.getAllowReviewService())
+				{
+					return;
+				}
+
+				List<ContentResource> resources = getAllAcceptableAttachments(attachments, ac.isAllowAnyFile());
+				contentReviewService.queueContent(ownerId, getContext(), asn.getReference(), resources, getId(), isResubmission);
 			}
 			catch (QueueException qe)
 			{
-				M_log.warn(" BaseAssignmentSubmissionEdit postAttachment: Unable to add content to Content Review queue: " + qe.getMessage());
+				M_log.warn("Unable to add content to Content Review queue: " + qe.getMessage());
 			}
 			catch (Exception e)
 			{
-				e.printStackTrace();
+				M_log.error(e);
 			}
 		}
-		
-		public void postAttachmentResub(List attachments){
-			//Send the attachment to the review service
-			try {
-				boolean allowAnyFile = this.getAssignment().getContent().isAllowAnyFile();
-				List<ContentResource> resources = getAllAcceptableAttachments(attachments, allowAnyFile);
-				Assignment ass = this.getAssignment();
-				if (ass != null)
-				{
-					//Group submissions store the group ID as the submitterId, so find an actual user ID
-					String userId = null;
-					if(getAssignment().isGroup()){
-						//first first user id from an attachment
-						for(ContentResource cr : resources){
-							userId = this.getContentReviewSubmitterId(cr);
-							if(userId != null){
-								break;
-							}
-						}
-					}else{
-						userId = this.getContentReviewSubmitterId(null);
-					}
-					contentReviewService.queueContent(userId, this.getContext(), ass.getReference(), resources, this.getId(), true);
-				}
-				else
-				{
-					// error, assignment couldn't be found. Log the error
-					M_log.debug(this + " BaseAssignmentSubmissionEdit postAttachmentResub: Unable to find assignment associated with submission id= " + this.m_id + " and assignment id=" + this.m_assignment);
-				}
-			} catch (QueueException qe) {
-				M_log.warn(" BaseAssignmentSubmissionEdit postAttachmentResub: Unable to add content to Content Review queue: " + qe.getMessage());
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
 
-		}
-
-		private ContentResource getFirstAcceptableAttachement(List attachments, boolean allowAnyFile) {
-			
-			for( int i =0; i < attachments.size();i++ ) { 
-				Reference attachment = (Reference)attachments.get(i);
-				try {
-					ContentResource res = m_contentHostingService.getResource(attachment.getId());
-					if (contentReviewService.isAcceptableSize(res) && (allowAnyFile || contentReviewService.isAcceptableContent(res))) {
-						return res;
-					}
-				} catch (PermissionException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-					M_log.warn(":geFirstAcceptableAttachment " + e.getMessage());
-				} catch (IdUnusedException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-					M_log.warn(":geFirstAcceptableAttachment " + e.getMessage());
-				} catch (TypeException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-					M_log.warn(":geFirstAcceptableAttachment " + e.getMessage());
-				}
-
-				
-			}
-			return null;
-		}
-
-		private List<ContentResource> getAllAcceptableAttachments(List attachments, boolean allowAnyFile)
+		private List<ContentResource> getAllAcceptableAttachments(List<Reference> attachments, boolean allowAnyFile)
 		{
-			List<ContentResource> resources = new ArrayList<ContentResource>();
-			for (int i = 0; i < attachments.size(); i++)
+			List<ContentResource> resources = new ArrayList<>();
+			for (Reference attachment : attachments)
 			{
-				Reference attachment = (Reference) attachments.get(i);
 				try
 				{
 					ContentResource res = m_contentHostingService.getResource(attachment.getId());
@@ -13207,20 +13166,9 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 						resources.add(res);
 					}
 				}
-				catch (PermissionException e)
+				catch (PermissionException | IdUnusedException | TypeException e)
 				{
-					e.printStackTrace();
-					M_log.warn(":getAllAcceptableAttachments " + e.getMessage());
-				}
-				catch (IdUnusedException e)
-				{
-					e.printStackTrace();
-					M_log.warn(":getAllAcceptableAttachments " + e.getMessage());
-				}
-				catch (TypeException e)
-				{
-					e.printStackTrace();
-					M_log.warn(":getAllAcceptableAttachments " + e.getMessage());
+					M_log.warn(":getAllAcceptableAttachments " + e.getMessage(), e);
 				}
 			}
 

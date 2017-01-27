@@ -6576,6 +6576,7 @@ public class AssignmentAction extends PagedResourceActionII
 						        }
 						    } 
 						    sEdit.setSubmitterId(group_id);
+							sEdit.setSubmittedForGroupByUserId(u.getId());
 						}
 
 						sEdit.setSubmittedText(text);
@@ -6752,14 +6753,11 @@ public class AssignmentAction extends PagedResourceActionII
 										if (!a.isGroup()) {
 											sEdit.setSubmitterId(u.getId());
 										}
-										if(!isPreviousSubmissionTime){//isUserSubmission can be used too
-											sEdit.postAttachment(attachments);
-										} else {
-											sEdit.postAttachmentResub(attachments);
-										}
+										
+										sEdit.submitContentToReviewService(attachments, isPreviousSubmissionTime, u.getId());
 									}
 								}
-																 
+
 								// clear the old attachments first
 								sEdit.clearSubmittedAttachments();
 
@@ -6819,11 +6817,16 @@ public class AssignmentAction extends PagedResourceActionII
 					{
 					    // if assignment is a group submission... send group id and not user id
 					    M_log.debug(this + " NEW SUBMISSION IS GROUP: " + a.isGroup() + " GROUP:" + group_id);
-					    AssignmentSubmissionEdit edit = a.isGroup() ? 
+					    AssignmentSubmissionEdit edit = a.isGroup() ?
 					            AssignmentService.addSubmission(contextString, assignmentId, group_id): 
 					                AssignmentService.addSubmission(contextString, assignmentId, SessionManager.getCurrentSessionUserId());
 						if (edit != null)
 						{
+							if (a.isGroup())
+							{
+								edit.setSubmittedForGroupByUserId(u.getId());
+							}
+
 							edit.setSubmittedText(text);
 							edit.setHonorPledgeFlag(Boolean.valueOf(honorPledgeYes).booleanValue());
 							edit.setTimeSubmitted(TimeService.newTime());
@@ -6846,7 +6849,8 @@ public class AssignmentAction extends PagedResourceActionII
 								if ((!attachments.isEmpty()) && a.getContent().getAllowReviewService() && post && !a.isGroup()) {
 									edit.setSubmitterId(u.getId());
 								}
-								edit.postAttachment(attachments);
+								//edit.postAttachment(attachments);
+								edit.submitContentToReviewService(attachments, false, u.getId());
 								
 								// add each attachment
 								Iterator it = attachments.iterator();
