@@ -10808,18 +10808,16 @@ public abstract class BaseAssignmentService implements AssignmentService, Entity
 			catch (QueueException cie) {
 				//should we add the item
 				try {
-						M_log.debug(this + " getReviewScore Item is not in queue we will try add it");
-						try {
-							contentReviewService.queueContent(getContentReviewSubmitterId(), this.getContext(), getAssignment().getReference(), Arrays.asList(cr), this.getId(), false);
-						}
-						catch (QueueException qe) {
-							M_log.warn(" getReviewScore Unable to queue content with content review Service: " + qe.getMessage());
-						}
-
-
+					M_log.debug(this + " getReviewScore Item is not in queue we will try add it");
+					try {
+						contentReviewService.queueContent(getContentReviewSubmitterId(), this.getContext(), getAssignment().getReference(), Arrays.asList(cr), this.getId(), false);
+					}
+					catch (QueueException qe) {
+						M_log.warn(" getReviewScore Unable to queue content with content review Service: " + qe.getMessage());
+					}
 
 				} catch (Exception e) {
-					e.printStackTrace();
+					M_log.error(e);
 				}
 				return -1;
 
