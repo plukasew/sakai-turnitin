@@ -4,7 +4,7 @@
 	<name>Content Review Turnitin Implementation</name>
 	<groupId>org.sakaiproject.contentreview.turnitin</groupId>
 	<artifactId>content-review-turnitin-impl</artifactId>
-	<packaging>pom</packaging>
+	<packaging>jar</packaging>
 
 	<parent>
 		<artifactId>content-review-impl</artifactId>
@@ -12,14 +12,6 @@
 		<version>13-SNAPSHOT</version>
 	</parent>
 
-	<modules>
-		<module>impl</module>
-		<module>hbm</module>
-		<module>tool</module>
-		<module>turnitin-api</module>
-		<module>common</module>
-	</modules>
-        
 	<dependencies>
 		<!-- Content Review dependencies -->
 		<dependency>

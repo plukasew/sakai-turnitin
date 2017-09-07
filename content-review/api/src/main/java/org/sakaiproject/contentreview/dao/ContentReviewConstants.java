@@ -15,7 +15,12 @@
  */
 package org.sakaiproject.contentreview.dao;
 
-public class ContentReviewConstants {
+public class ContentReviewConstants
+{
+	// TIITODO: the prefix "CONTENT_REVIEW" is redundant and should be removed from all these variable names once this all builds.
+	// Additionally, the messages are not localized so they should not be used outside of the database/log messages.
+	// Check all usages and confirm they are not used inappropriately where localized text should be used instead.
+	
 	public static final String CONTENT_REVIEW_NOT_SUBMITTED = "Content awaiting submission";
 	public static final Long CONTENT_REVIEW_NOT_SUBMITTED_CODE = new Long(1);
 
