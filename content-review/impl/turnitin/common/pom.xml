@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <artifactId>content-review-turnitin-impl</artifactId>
+        <groupId>org.sakaiproject.contentreview.turnitin</groupId>
+        <version>13-SNAPSHOT</version>
+    </parent>
+
+    <name>Turnitin ContentReview Common</name>
+    <groupId>org.sakaiproject.contentreview.turnitin</groupId>
+    <artifactId>content-review-turnitin-impl-common</artifactId>
+    <organization>
+        <name>Sakai Project</name>
+        <url>www.sakaiproject.org</url>
+    </organization>
+    <inceptionYear>2016</inceptionYear>
+    <packaging>jar</packaging>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+        </resources>
+  </build>
+
+</project>
