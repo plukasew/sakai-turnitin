@@ -29,6 +29,11 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 	public List<ContentReviewItem> findByProviderAnyMatching(Integer providerId, String contentId, String userId, String siteId, String taskId,
 			String externalId, Long status, Integer errorCode) {
 
+		// TIITODO: this catch-all method signature is a nightmare.
+		// Who knows what findByProviderAnyMatching(providerId, null, null, null, null, "xyz", null, null) will return?
+		// Replace with a dedicated class so we can make calls similar to this:
+		// MyParams params = new MyParams(); params.externalId = "xzy"; dao.findByProviderAnyMatching(providerId, params);
+		
 		Criteria c = sessionFactory.getCurrentSession()
 				.createCriteria(ContentReviewItem.class)
 				.add(Restrictions.eq("providerId", providerId));
