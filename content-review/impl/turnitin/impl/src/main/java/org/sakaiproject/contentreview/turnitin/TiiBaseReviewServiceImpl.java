@@ -21,14 +21,26 @@
 package org.sakaiproject.contentreview.turnitin;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.URLDecoder;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import org.apache.commons.lang.StringUtils;
 
 import org.apache.commons.logging.Log;
@@ -45,6 +57,7 @@ import org.sakaiproject.contentreview.service.ContentReviewService;
 import org.sakaiproject.contentreview.service.ContentReviewQueueService;
 import org.sakaiproject.contentreview.service.ContentReviewSiteAdvisor;
 import org.sakaiproject.contentreview.dao.ContentReviewConstants;
+import org.sakaiproject.contentreview.turnitin.TurnitinConstants;
 import org.sakaiproject.genericdao.api.search.Order;
 import org.sakaiproject.genericdao.api.search.Restriction;
 import org.sakaiproject.genericdao.api.search.Search;
@@ -53,6 +66,8 @@ import org.sakaiproject.tool.api.ToolManager;
 import org.sakaiproject.user.api.UserDirectoryService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinAPIUtil;
+import org.sakaiproject.contentreview.turnitin.util.TurnitinReturnValue;
+import org.sakaiproject.contentreview.turnitin.util.TurnitinLTIUtil;
 import org.sakaiproject.assignment.api.AssignmentService;
 
 import lombok.extern.slf4j.Slf4j;
@@ -60,17 +75,29 @@ import lombok.Setter;
 import org.apache.commons.validator.EmailValidator;
 import org.sakaiproject.api.common.edu.person.SakaiPerson;
 import org.sakaiproject.component.api.ServerConfigurationService;
+import org.sakaiproject.content.api.ContentHostingService;
 import org.sakaiproject.contentreview.exception.TransientSubmissionException;
+import static org.sakaiproject.contentreview.turnitin.TurnitinReviewServiceImpl.TURNITIN_DATETIME_FORMAT;
+import org.sakaiproject.entity.api.Entity;
+import org.sakaiproject.entity.api.EntityProducer;
+import org.sakaiproject.entity.api.Reference;
 import org.sakaiproject.entity.api.ResourceProperties;
 import org.sakaiproject.exception.IdUnusedException;
 import org.sakaiproject.exception.PermissionException;
 import org.sakaiproject.exception.TypeException;
+import org.sakaiproject.site.api.SiteService;
 import org.sakaiproject.user.api.User;
 import org.sakaiproject.user.api.UserNotDefinedException;
+import org.sakaiproject.util.ResourceLoader;
 import org.w3c.dom.CharacterData;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
+
+// TIITODO: there is a lot going on in this class. If it makes sense, consider splitting up into two delegate classes,
+// one for dealing with the queue and one for dealing with the reports. Common methods can be left in this class.
+// Further modularization with delegate classes dedicated to specific purposes should also be considered.
 
 /**
  * This class fulfills the basic contract of ContentReviewService, implementing the full interface.
@@ -81,15 +108,12 @@ import org.w3c.dom.Element;
  */
 @Slf4j
 public class TiiBaseReviewServiceImpl implements ContentReviewService
-{
+{	
 	private String defaultAssignmentName = null;
 	
 	//note that the assignment id actually has to be unique globally so use this as a prefix
 	// eg. assignid = defaultAssignId + siteId
 	private String defaultAssignId = null;
-
-	private static final Log log = LogFactory
-			.getLog(TiiBaseReviewServiceImpl.class);
 
 	private ContentReviewItemDao dao;
 
@@ -127,6 +151,18 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	@Setter
 	private AssignmentService assignmentService;
 	
+	@Setter
+	private ContentHostingService contentHostingService;
+	
+	@Setter
+	private SiteService siteService;
+	
+	@Setter
+	private TurnitinLTIUtil tiiUtil;
+	
+	@Setter	
+	private TurnitinContentValidator turnitinContentValidator;
+	
 	private boolean studentAccountNotified = true;
 	private int sendSubmissionNotification = 0;
 	private String defaultClassPassword = null;
@@ -135,6 +171,10 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	public void setMaxRetry(Long maxRetry) {
 		this.maxRetry = maxRetry;
 	}
+	
+	// These are error messages from turnitin for which the item should never be retried,
+	// because it will never recover (Eg. less than 20 words, invalid file, etc.)
+	private Set<String> terminalQueueErrors;
 	
 	/**
 	 *  If set to true in properties, will result in 3 random digits being appended
@@ -150,7 +190,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	private boolean preferGuestEidEmail = true;
 	
 	// Spring init
-	// TIITODO: wire this up as a Spring bean
+	// TIITODO: wire this up as a Spring bean? Or is wiring up the subclass TurnitinReviewServiceImpl enough?
 	public void init()
 	{
 		studentAccountNotified = turnitinConn.isStudentAccountNotified();
@@ -166,6 +206,14 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		log.info("init(): spoilEmailAddresses=" + spoilEmailAddresses + 
 		          " preferSystemProfileEmail=" + preferSystemProfileEmail + 
 		          " preferGuestEidEmail=" + preferGuestEidEmail);
+		
+		String[] strTerminalQueueErrors = serverConfigurationService.getStrings("turnitin.terminalQueueErrors");
+		if (strTerminalQueueErrors == null)
+		{
+			strTerminalQueueErrors = TurnitinConstants.DEFAULT_TERMINAL_QUEUE_ERRORS;
+		}
+		terminalQueueErrors = new HashSet<>(strTerminalQueueErrors.length);
+		Collections.addAll(terminalQueueErrors, strTerminalQueueErrors);
 	}
 	
 	@Override
@@ -640,9 +688,9 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			if (currentItem.getRetryCount() == null ) {
 				currentItem.setRetryCount(0L);
 				currentItem.setNextRetryTime(getNextRetryTime(0));
-				dao.update(currentItem);
+				crqServ.update(currentItem);
 			} else if (currentItem.getRetryCount().intValue() > maxRetry) {
-				processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_EXCEEDED, null, null );
+				processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_EXCEEDED_CODE, null, null );
 				errors++;
 				continue;
 			} else {
@@ -650,7 +698,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				l++;
 				currentItem.setRetryCount(l);
 				currentItem.setNextRetryTime(this.getNextRetryTime(l));
-				dao.update(currentItem);
+				crqServ.update(currentItem);
 			}
 
 			User user;
@@ -659,7 +707,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				user = userDirectoryService.getUser(currentItem.getUserId());
 			} catch (UserNotDefinedException e1) {
 				log.error("Submission attempt unsuccessful - User not found.", e1);
-				processError(currentItem, ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE, null, null);
+				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE, null, null);
 				errors++;
 				continue;
 			}
@@ -671,7 +719,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				{
 					log.error("User: " + user.getEid() + " has no valid email");
 				}
-				processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_USER_DETAILS_CODE, "no valid email", null );
+				processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_USER_DETAILS_CODE, "no valid email", null );
 				errors++;
 				continue;
 			}
@@ -682,7 +730,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				{
 					log.error("Submission attempt unsuccessful - User has no first name");
 				}
-				processError(currentItem, ContentReviewItem.SUBMISSION_ERROR_USER_DETAILS_CODE, "has no first name", null);
+				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_USER_DETAILS_CODE, "has no first name", null);
 				errors++;
 				continue;
 			}
@@ -693,18 +741,18 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				{
 					log.error("Submission attempt unsuccessful - User has no last name");
 				}
-				processError(currentItem, ContentReviewItem.SUBMISSION_ERROR_USER_DETAILS_CODE, "has no last name", null);
+				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_USER_DETAILS_CODE, "has no last name", null);
 				errors++;
 				continue;
 			}
 			
-			Site s;
+			Site currentSite;
 			try {
-				s = siteService.getSite(currentItem.getSiteId());
+				currentSite = siteService.getSite(currentItem.getSiteId());
 			}
 			catch (IdUnusedException iue) {
 				log.error("processQueue: Site " + currentItem.getSiteId() + " not found!" + iue.getMessage());
-				processError(currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE, "site not found", null);
+				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE, "site not found", null);
 				errors++;
 				continue;
 			}
@@ -719,8 +767,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				} catch (IdUnusedException e4) {
 					// Remove this item
 					log.warn("IdUnusedException: no resource with id " + currentItem.getContentId());
-					dao.delete(currentItem);
-					releaseLock(currentItem);
+					crqServ.delete(currentItem);
 					errors++;
 					continue;
 				}
@@ -730,13 +777,13 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			}
 			catch (PermissionException e2) {
 				log.error("Submission failed due to permission error.", e2);
-				processError(currentItem, ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE, "permission exception", null);
+				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE, "permission exception", null);
 				errors++;
 				continue;
 			}
 			catch (TypeException e) {
 				log.error("Submission failed due to content Type error.", e);
-				processError(currentItem, ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE, "Type Exception: " + e.getMessage(), null);
+				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE, "Type Exception: " + e.getMessage(), null);
 				errors++;
 				continue;
 			}
@@ -748,7 +795,13 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		
 			//////////////////////////////  NEW LTI INTEGRATION  ///////////////////////////////
 			Optional<Date> dateOpt = getAssignmentCreationDate(currentItem.getTaskId());
-			if(dateOpt.isPresent() && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, dateOpt.get()) && currentItem.getSubmissionId()!=null){
+			
+			// TIITODO: this code uses the submissionId and resubmission properties that were added to contentreviewitem for LTI support
+			// Determine if these properties make sense for general purpose content review items, or if they are specific to the Turnitin
+			// LTI implementation and belong in a separate table (with the isUrlAccessed property)
+			// for now, references to these properties are commented out
+			
+			if(dateOpt.isPresent() && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(currentSite, dateOpt.get()) /* TIITODO: && currentItem.getSubmissionId()!=null*/){
 				
 				Map<String,String> ltiProps = new HashMap<>();
 				ltiProps.put("context_id", currentItem.getSiteId());
@@ -763,7 +816,8 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 
 				String[] parts = currentItem.getTaskId().split("/");
 				log.debug(parts[parts.length -1] + " " + parts.length);
-				String httpAccess = serverConfigurationService.getServerUrl() + "/access/assignment/s/" + currentItem.getSiteId() + "/" + parts[parts.length -1] + "/" + currentItem.getSubmissionId();
+				String httpAccess = serverConfigurationService.getServerUrl() + "/access/assignment/s/" + currentItem.getSiteId() + "/" 
+						+ parts[parts.length -1] + "/"/* TIITODO: + currentItem.getSubmissionId()*/;
 				httpAccess += ":" + currentItem.getId() + ":" + currentItem.getContentId().hashCode();
 				log.debug("httpAccess url: " + httpAccess);//debug
 				ltiProps.put("submission_url", httpAccess);
@@ -781,13 +835,14 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				String tiiId = "";
 				if (a != null)
 				{
+					// TIITODO: re-evaluate the activity config table, consider a dedicated, properly-typed table just for Turnitin to store these values
 					tiiId = getActivityConfigValue(TurnitinConstants.TURNITIN_ASN_ID, a.getId(), TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID,
 						TurnitinConstants.PROVIDER_ID);
 				}
 
 				if(tiiId.isEmpty()){
 					log.error("Could not find tiiId for assignment: " + currentItem.getTaskId());
-					processError(currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE, "Could not find tiiId", null);
+					processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE, "Could not find tiiId", null);
 					errors++;
 					continue;
 				}
@@ -795,7 +850,8 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				TurnitinReturnValue result = new TurnitinReturnValue();
 				result.setResult( -1 );
 				boolean isResubmission = false;
-				if(currentItem.isResubmission())
+				// TIITODO: fix below
+				/*if(currentItem.isResubmission()) 
 				{
 					AssignmentContent ac = a.getContent();
 					// Resubmit only for submission types that allow only one file per submission
@@ -807,7 +863,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 						isResubmission = true;
 						result = tiiUtil.makeLTIcall(TurnitinLTIUtil.RESUBMIT, tiiPaperId, ltiProps);
 					}
-				}
+				}*/
 				if (!isResubmission)
 				{
 					result = tiiUtil.makeLTIcall(TurnitinLTIUtil.SUBMIT, tiiId, ltiProps);
@@ -817,20 +873,19 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 					log.debug("LTI submission successful");
 					//problems overriding this on callback
 					//currentItem.setExternalId(externalId);
-					currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
+					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
 					currentItem.setRetryCount(Long.valueOf(0));
 					currentItem.setLastError(null);
 					currentItem.setErrorCode(null);
 					currentItem.setDateSubmitted(new Date());
 					success++;
-					dao.update(currentItem);
-					releaseLock(currentItem);
+					crqServ.update(currentItem);
 				} else {
-					Long errorCode = ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE;
+					Long errorCode = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE;
 					// TII-242 - evaluate result.getErrorMessage() to prevent unnecessary retries if the error is terminal
 					if (terminalQueueErrors.contains(result.getErrorMessage()))
 					{
-						errorCode = ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE;
+						errorCode = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE;
 					}
 					else
 					{
@@ -853,11 +908,11 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 					createClass(currentItem.getSiteId());
 				} catch (SubmissionException t) {
 					log.error ("Submission attempt unsuccessful: Could not create class", t);
-					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE, "Class creation error: " + t.getMessage(), null );
+					processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE, "Class creation error: " + t.getMessage(), null );
 					errors++;
 					continue;
 				} catch (TransientSubmissionException tse) {
-					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE, "Class creation error: " + tse.getMessage(), null );
+					processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE, "Class creation error: " + tse.getMessage(), null );
 					errors++;
 					continue;
 				}
@@ -872,10 +927,10 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				String error;
 				if (t.getClass() == IOException.class) {
 					error = "Enrolment error: " + t.getMessage();
-					status = ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE;
+					status = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE;
 				} else {
 					error = "Enrolment error: " + t.getMessage();
-					status = ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE;
+					status = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE;
 				}
 
 				processError( currentItem, status, error, null );
@@ -887,10 +942,11 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				try {
 					Map tiiresult = this.getAssignment(currentItem.getSiteId(), currentItem.getTaskId());
 					if (tiiresult.get("rcode") != null && !tiiresult.get("rcode").equals("85")) {
-						createAssignment(currentItem.getSiteId(), currentItem.getTaskId());
+						createAssignment(currentItem.getSiteId(), currentItem.getTaskId(), null);
 					}
 				} catch (SubmissionException se) {
-					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE, "Assignment creation error: " + se.getMessage(), se.getErrorCode() );
+					processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE,
+							"Assignment creation error: " + se.getMessage(), se.getErrorCode() );
 					errors++;
 					continue;
 				} catch (TransientSubmissionException tse) {
@@ -898,7 +954,8 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 						currentItem.setErrorCode(tse.getErrorCode());
 					}
 
-					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE, "Assignment creation error: " + tse.getMessage(), null );
+					processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE,
+							"Assignment creation error: " + tse.getMessage(), null );
 					errors++;
 					continue;
 
@@ -962,7 +1019,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				document = turnitinConn.callTurnitinReturnDocument(params, true);
 			}
 			catch (TransientSubmissionException | SubmissionException e) {
-				processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE, "Error Submitting Assignment for Submission: " + e.getMessage() + ". Assume unsuccessful", null );
+				processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE, "Error Submitting Assignment for Submission: " + e.getMessage() + ". Assume unsuccessful", null );
 				errors++;
 				continue;
 			}
@@ -995,18 +1052,17 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				if (externalId != null && externalId.length() >0 ) {
 					log.debug("Submission successful");
 					currentItem.setExternalId(externalId);
-					currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
+					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
 					currentItem.setRetryCount(Long.valueOf(0));
 					currentItem.setLastError(null);
 					currentItem.setErrorCode(null);
 					currentItem.setDateSubmitted(new Date());
 					success++;
-					dao.update(currentItem);
-					dao.updateExternalId(currentItem.getContentId(), externalId);
-					releaseLock( currentItem );
+					crqServ.update(currentItem);
 				} else {
 					log.warn("invalid external id");
-					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE, "Submission error: no external id received", null );
+					processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE,
+							"Submission error: no external id received", null );
 					errors++;
 				}
 			} else {
@@ -1015,90 +1071,324 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				Long status;
 				if (rMessage.equals("User password does not match user email")
 						|| "1001".equals(rCode) || "".equals(rMessage) || "413".equals(rCode) || "1025".equals(rCode) || "250".equals(rCode)) {
-					status = ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE;
+					status = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE;
 					log.warn("Submission not successful. It will be retried.");
 				} else if (rCode.equals("423")) {
-					status = ContentReviewItem.SUBMISSION_ERROR_USER_DETAILS_CODE;
+					status = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_USER_DETAILS_CODE;
 				} else if (rCode.equals("301")) {
 					//this took a long time
 					log.warn("Submission not successful due to timeout. It will be retried.");
-					status = ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE;
+					status = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE;
 					Calendar cal = Calendar.getInstance();
 					cal.set(Calendar.HOUR_OF_DAY, 22);
 					currentItem.setNextRetryTime(cal.getTime());
 				}else {
 					log.error("Submission not successful. It will NOT be retried.");
-					status = ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE;
+					status = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE;
 				}
 
 				processError( currentItem, status, "Submission Error: " + rMessage + "(" + rCode + ")", Integer.valueOf(rCode) );
 				errors++;
 			}
+			// TIITODO: below is new code straight out of the 13.x implementation, is this right? won't it skip items?
+			// what does it have to do with releasing locks?
+			
+			// release the lock so the reports job can handle it
+			crqServ.getNextItemInQueueToSubmit(getProviderId());
 		}
 
 		log.info("Submission queue run completed: " + success + " items submitted, " + errors + " errors.");
+	} // end processQueue()
+	
+	/**
+	 * This method was originally private, but is being made public for the
+	 * moment so we can run integration tests. TODO Revisit this decision.
+	 *
+	 * @param siteId
+	 * @throws SubmissionException
+	 * @throws TransientSubmissionException
+	 */
+	@SuppressWarnings("unchecked")
+	public void createClass(String siteId) throws SubmissionException, TransientSubmissionException {
+		log.debug("Creating class for site: " + siteId);
+
+		String cpw = defaultClassPassword;
+		String ctl = siteId;
+		String fcmd = "2";
+		String fid = "2";
+		String utp = "2"; 					//user type 2 = instructor
+		String cid = siteId;
+
+		Document document;
+
+		Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+				"cid", cid,
+				"cpw", cpw,
+				"ctl", ctl,
+				"fcmd", fcmd,
+				"fid", fid,
+				"utp", utp
+		);
+
+		params.putAll(getInstructorInfo(siteId));
+
+		document = turnitinConn.callTurnitinReturnDocument(params);
+
+		Element root = document.getDocumentElement();
+		String rcode = ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim();
+
+		if (((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("20") == 0 ||
+				((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("21") == 0 ) {
+			log.debug("Create Class successful");
+		} else {
+			if ("218".equals(rcode) || "9999".equals(rcode)) {
+				throw new TransientSubmissionException("Create Class not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim());
+			} else {
+				throw new SubmissionException("Create Class not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim());
+			}
+		}
 	}
 	
+	/**
+	 * Currently public for integration tests. TODO Revisit visibility of
+	 * method.
+	 *
+	 * @param userId
+	 * @param uem
+	 * @param siteId
+	 * @throws SubmissionException
+	 * @throws org.sakaiproject.contentreview.exception.TransientSubmissionException
+	 */
+	public void enrollInClass(String userId, String uem, String siteId) throws SubmissionException, TransientSubmissionException {
 
+		String uid = userId;
+		String cid = siteId;
 
+		String ctl = siteId;
+		String fid = "3";
+		String fcmd = "2";
+		String tem = getTEM(cid);
+
+		User user;
+		try {
+			user = userDirectoryService.getUser(userId);
+		} catch (Exception t) {
+			throw new SubmissionException ("Cannot get user information", t);
+		}
+
+		log.debug("Enrolling user " + user.getEid() + "(" + userId + ")  in class " + siteId);
+
+		String ufn = getUserFirstName(user);
+		if (ufn == null) {
+			throw new SubmissionException ("User has no first name");
+		}
+
+		String uln = getUserLastName(user);
+		if (uln == null) {
+			throw new SubmissionException ("User has no last name");
+		}
+
+		String utp = "1";
+
+		Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+				"fid", fid,
+				"fcmd", fcmd,
+				"cid", cid,
+				"tem", tem,
+				"ctl", ctl,
+				"dis", studentAccountNotified ? "0" : "1",
+				"uem", uem,
+				"ufn", ufn,
+				"uln", uln,
+				"utp", utp,
+				"uid", uid
+		);
+
+		Document document = turnitinConn.callTurnitinReturnDocument(params);
+
+		Element root = document.getDocumentElement();
+
+		String rMessage = ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData();
+		String rCode = ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData();
+		if ("31".equals(rCode)) {
+			log.debug("Results from enrollInClass with user + " + userId + " and class title: " + ctl + ".\n" +
+					"rCode: " + rCode + " rMessage: " + rMessage);
+		} else {
+			//certain return codes need to be logged
+			log.warn("Results from enrollInClass with user + " + userId + " and class title: " + ctl + ". " +
+					"rCode: " + rCode + ", rMessage: " + rMessage);
+			//TODO for certain types we should probably throw an exception here and stop the proccess
+		}
+
+	}
+	
+	@Override
+	public void checkForReports() {
+		checkForReportsBulk();
+	}
+
+	@Override
 	public List<ContentReviewItem> getReportList(String siteId, String taskId) {
 		log.debug("Returning list of reports for site: " + siteId + ", task: " + taskId);
-		Search search = new Search();
-		//TII-99 siteId can be null
-		if (siteId != null) {
-			search.addRestriction(new Restriction("siteId", siteId));
-		}
-		search.addRestriction(new Restriction("taskId", taskId));
-		search.addRestriction(new Restriction("status", ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE));
 		
-		List<ContentReviewItem> existingItems = dao.findBySearch(ContentReviewItem.class, search);
-		
-		
-		return existingItems;
+		// TIITODO: make this a method of ContentReviewQueueService?
+		return dao.findByProviderAnyMatching(getProviderId(), null, null, siteId, taskId, null,
+				ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE, null);
 	}
 	
-	public List<ContentReviewItem> getAllContentReviewItems(String siteId, String taskId) {
-            log.debug("Returning list of reports for site: " + siteId + ", task: " + taskId);
-            Search search = new Search();
-            //TII-99 siteId can be null
-            if (siteId != null) {
-                    search.addRestriction(new Restriction("siteId", siteId));
-            }
-            search.addRestriction(new Restriction("taskId", taskId));
-            
-            List<ContentReviewItem> existingItems = dao.findBySearch(ContentReviewItem.class, search);
-            
-            
-            return existingItems;
+	@Override
+	public List<ContentReviewItem> getReportList(String siteId)
+	{
+		return getReportList(siteId, null);
+	}
+	
+	@Override
+	public List<ContentReviewItem> getAllContentReviewItems(String siteId, String taskId)
+	{
+		log.debug("Returning list of reports for site: " + siteId + ", task: " + taskId);
+		
+		return crqServ.getContentReviewItems(getProviderId(), siteId, taskId);
     }
 	
-	public List<ContentReviewItem> getReportList(String siteId) {
-		log.debug("Returning list of reports for site: " + siteId);
-		
-		Search search = new Search();
-		search.addRestriction(new Restriction("siteId", siteId));
-		search.addRestriction(new Restriction("status", ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE));
-		
-		return dao.findBySearch(ContentReviewItem.class, search);
+	@Override
+	public String getServiceName()
+	{
+		return TurnitinConstants.SERVICE_NAME;
 	}
 	
-
+	@Override
+	public void resetUserDetailsLockedItems(String userId)
+	{
+		crqServ.resetUserDetailsLockedItems(getProviderId(), userId);
+	}
 	
-	public void resetUserDetailsLockedItems(String userId) {
-		Search search = new Search();
-		search.addRestriction(new Restriction("userId", userId));
-		search.addRestriction(new Restriction("status", ContentReviewItem.SUBMISSION_ERROR_USER_DETAILS_CODE));
+	// SAK-27857	--bbailla2
+	@Override
+	public boolean allowAllContent()
+	{
+		// Turntin reports errors when content is submitted that it can't check originality against. So we will block unsupported content.
+		return serverConfigurationService.getBoolean(TurnitinConstants.SAK_PROP_ACCEPT_ALL_FILES, false);
+	}
+	
+	/* (non-Javadoc)
+	 * @see org.sakaiproject.contentreview.service.ContentReviewService#isAcceptableContent(org.sakaiproject.content.api.ContentResource)
+	 */
+	@Override
+	public boolean isAcceptableContent(ContentResource resource)
+	{
+		return turnitinContentValidator.isAcceptableContent(resource);
+	}
+	
+	// TII-157	--bbailla2
+	@Override
+	public Map<String, SortedSet<String>> getAcceptableExtensionsToMimeTypes()
+	{
+		// TIITODO: consider moving these mime/file type implementations to a delegate class dedicated to this purpose
+		// also, can we just compute this once and store it?
 		
-		
-		List<ContentReviewItem> lockedItems = dao.findBySearch(ContentReviewItem.class, search);
-		for (int i =0; i < lockedItems.size();i++) {
-			ContentReviewItem thisItem = (ContentReviewItem) lockedItems.get(i);
-			thisItem.setStatus(ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE);
-			dao.update(thisItem);
+		Map<String, SortedSet<String>> acceptableExtensionsToMimeTypes = new HashMap<>();
+		String[] acceptableFileExtensions = getAcceptableFileExtensions();
+		String[] acceptableMimeTypes = getAcceptableMimeTypes();
+		int min = Math.min(acceptableFileExtensions.length, acceptableMimeTypes.length);
+		for (int i = 0; i < min; i++)
+		{
+			appendToMap(acceptableExtensionsToMimeTypes, acceptableFileExtensions[i], acceptableMimeTypes[i]);
 		}
+
+		return acceptableExtensionsToMimeTypes;
+	}
+
+	// TII-157	--bbailla2
+	@Override
+	public Map<String, SortedSet<String>> getAcceptableFileTypesToExtensions()
+	{
+		// TIITODO: see notes above
+		
+		Map<String, SortedSet<String>> acceptableFileTypesToExtensions = new LinkedHashMap<>();
+		String[] acceptableFileTypes = getAcceptableFileTypes();
+		String[] acceptableFileExtensions = getAcceptableFileExtensions();
+		if (acceptableFileTypes != null && acceptableFileTypes.length > 0)
+		{
+			// The acceptable file types are listed in sakai.properties. Sakai.properties takes precedence.
+			int min = Math.min(acceptableFileTypes.length, acceptableFileExtensions.length);
+			for (int i = 0; i < min; i++)
+			{
+				appendToMap(acceptableFileTypesToExtensions, acceptableFileTypes[i], acceptableFileExtensions[i]);
+			}
+		}
+		else
+		{
+			/*
+			 * acceptableFileTypes not specified in sakai.properties (this is normal).
+			 * Use ResourceLoader to resolve the file types.
+			 * If the resource loader doesn't find the file extenions, log a warning and return the [missing key...] messages
+			 */
+			ResourceLoader resourceLoader = new ResourceLoader("turnitin");
+			for( String fileExtension : acceptableFileExtensions )
+			{
+				String key = TurnitinConstants.KEY_FILE_TYPE_PREFIX + fileExtension;
+				if (!resourceLoader.getIsValid(key))
+				{
+					log.warn("While resolving acceptable file types for Turnitin, the sakai.property "
+							+ TurnitinConstants.SAK_PROP_ACCEPTABLE_FILE_TYPES + " is not set, and the message bundle "
+							+ key + " could not be resolved. Displaying [missing key ...] to the user");
+				}
+				String fileType = resourceLoader.getString(key);
+				appendToMap( acceptableFileTypesToExtensions, fileType, fileExtension );
+			}
+		}
+
+		return acceptableFileTypesToExtensions;
 	}
 	
+		/**
+	 * Allow Turnitin for this site?
+	 * @param s
+	 * @return 
+	 */
+	@Override
+	public boolean isSiteAcceptable(Site s)
+	{
+		// TIITODO: dedicated class for this stuff? it is already partially delegated to siteAdvisor
+		
+		if (s == null) {
+			return false;
+		}
 
+		log.debug("isSiteAcceptable: " + s.getId() + " / " + s.getTitle());
+
+		// Delegated to another bean
+		if (siteAdvisor != null) {
+			return siteAdvisor.siteCanUseReviewService(s);
+		}
+
+		// Check site property
+		ResourceProperties properties = s.getProperties();
+
+                String prop = (String) properties.get(TURNITIN_SITE_PROPERTY);
+                if (prop != null) {
+			log.debug("Using site property: " + prop);
+                        return Boolean.parseBoolean(prop);
+                }
+
+		// Check list of allowed site types, if defined
+		if (enabledSiteTypes != null && !enabledSiteTypes.isEmpty()) {
+			log.debug("Using site type: " + s.getType());
+			return enabledSiteTypes.contains(s.getType());
+		}
+
+		// No property set, no restriction on site types, so allow
+        return true; 
+    }
+	
+	
+	@Override
+	public boolean allowResubmission()
+	{
+		return true;
+	}
+	
+	@Override
 	public void removeFromQueue(String ContentId) {
 		List<ContentReviewItem> object = getItemsByContentId(ContentId);
 		dao.delete(object);
@@ -1133,19 +1423,6 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		return null;
 	}
 
-	public boolean allowResubmission() {
-		return true;
-	}
-
-	public boolean isSiteAcceptable(Site s) {
-		throw new UnsupportedOperationException("Not implemented");
-	}
-
-	public void checkForReports() {
-		// TODO Auto-generated method stub
-		
-	}
-
 	public String getIconUrlforScore(Long score) {
 		// TODO Auto-generated method stub
 		return null;
@@ -1156,19 +1433,24 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	public boolean isAcceptableSize(ContentResource resource) {
 		throw new UnsupportedOperationException("Not implemented");
 	}
-
-	public String getServiceName() {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	public boolean isAcceptableContent(ContentResource resource) {
-		throw new UnsupportedOperationException("This is not yet implemented");
-	}
-
-	public void processQueue() {
-		// TODO Auto-generated method stub
-		
+	
+	/**
+	 * Creates or Updates an Assignment
+	 *
+	 * This method will look at the current user or default instructor for it's
+	 * user information.
+	 *
+	 *
+	 * @param siteId
+	 * @param taskId an assignment reference
+	 * @param extraAsnOpts
+	 * @throws SubmissionException
+	 * @throws TransientSubmissionException
+	 */
+	@SuppressWarnings("unchecked")
+	@Override
+	public void createAssignment(String siteId, String asnId, Map extraAsnOpts) throws SubmissionException, TransientSubmissionException {
+		syncAssignment(siteId, asnId, extraAsnOpts, null);
 	}
 
 	@Override
@@ -1225,7 +1507,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	}
 	
 	/* ------------------------------ PRIVATE / PROTECTED only below this line ------------------------------ */
-	// TIITODO: separate the legacy and LTI methods, move legacy methods to delegate class for easy removal later
+	// TIITODO: separate the legacy and LTI methods, move legacy methods to delegate class for easy removal later?
 	
 	
 	protected String getLTIReportAccess(ContentReviewItem item)
@@ -1494,5 +1776,603 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		Calendar cal = Calendar.getInstance();
 		cal.add(Calendar.MINUTE, offset);
 		return cal.getTime();
+	}
+	
+	private void processError( ContentReviewItem item, Long status, String error, Integer errorCode )
+	{
+		try
+		{
+			if( status == null )
+			{
+				IllegalArgumentException ex = new IllegalArgumentException( "Status is null; you must supply a valid status to update when calling processError()" );
+				throw ex;
+			}
+			else
+			{
+				item.setStatus( status );
+			}
+			if( error != null )
+			{
+				item.setLastError(error);
+			}
+			if( errorCode != null )
+			{
+				item.setErrorCode( errorCode );
+			}
+
+			crqServ.update( item );
+
+			// Update urlAccessed to true if status is being updated to one of the dead states (5, 6, 8 and 9)
+			if( isDeadState( status ) )
+			{
+				try
+				{
+					// TIITODO: why do we need to get a ContentResourse to set the isUrlAccessed property?
+					// This is stored in the content review item table (and will be moved to a dedicated table probably)
+					// so do we need to involve contentHostingService?
+					ContentResource resource = contentHostingService.getResource( item.getContentId() );
+					boolean itemUpdated = updateItemAccess( resource.getId() );
+					if (!itemUpdated)
+					{
+						log.error( "Could not update cr item access status" );
+					}
+				}
+				catch( PermissionException | IdUnusedException | TypeException ex )
+				{
+					log.error( "Error updating cr item access status; item id = " + item.getContentId(), ex );
+				}
+			}
+		}
+		finally
+		{
+			// TIITODO: clean up this try/finally if we don't need it. The 13.x impl doesn't use explicit locking like this
+			//releaseLock( item );  
+		}
+	}
+
+	/**
+	 * Returns true/false if the given status is one of the 'dead' TII states
+	 * @param status the status to check
+	 * @return true if the status given is of one of the dead states; false otherwise
+	 */
+	private boolean isDeadState( Long status )
+	{
+		return status != null && (status.equals( ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE )
+				|| status.equals( ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_NO_RETRY_CODE ) 
+			|| status.equals( ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_EXCEEDED_CODE ));
+	}
+	
+	public String escapeFileName(String fileName, String contentId) {
+		log.debug("original filename is: " + fileName);
+		if (fileName == null) {
+			//use the id
+			fileName  = contentId;
+		} else if (fileName.length() > 199) {
+			fileName = fileName.substring(0, 199);
+		}
+		log.debug("fileName is :" + fileName);
+		try {
+			fileName = URLDecoder.decode(fileName, "UTF-8");
+			//in rare cases it seems filenames can be double encoded
+			while (fileName.indexOf("%20")> 0 || fileName.contains("%2520") ) {
+				try {
+					fileName = URLDecoder.decode(fileName, "UTF-8");
+				}
+				catch (IllegalArgumentException eae) {
+					log.warn("Unable to decode fileName: " + fileName, eae);
+					//as the result is likely to cause a MD5 exception use the ID
+					return contentId;
+				}
+			}
+		}
+		catch (IllegalArgumentException eae) {
+			log.warn("Unable to decode fileName: " + fileName, eae);
+			return contentId;
+		} catch (UnsupportedEncodingException e) {
+			log.debug( e );
+		}
+
+		fileName = fileName.replace(' ', '_');
+		//its possible we have double _ as a result of this lets do some cleanup
+		fileName = StringUtils.replace(fileName, "__", "_");
+
+		log.debug("fileName is :" + fileName);
+		return fileName;
+	}
+	
+	private String truncateFileName(String fileName, int i) {
+		//get the extension for later re-use
+		String extension = "";
+		if (fileName.contains(".")) {
+			 extension = fileName.substring(fileName.lastIndexOf("."));
+		}
+
+		fileName = fileName.substring(0, i - extension.length());
+		fileName = fileName + extension;
+
+		return fileName;
+	}
+	
+	private Optional<Date> getAssignmentCreationDate(String assignmentRef)
+	{
+		try
+		{
+			org.sakaiproject.assignment.api.model.Assignment asn = assignmentService.getAssignment(assignmentRef);
+			return getAssignmentCreationDate(asn);
+		}
+		catch(IdUnusedException | PermissionException e)
+		{
+			return Optional.empty();
+		}
+	}
+
+	private Optional<Date> getAssignmentCreationDate(org.sakaiproject.assignment.api.model.Assignment asn)
+	{
+		if (asn == null)
+		{
+			return Optional.empty();
+		}
+		Date date = new Date(asn.getTimeCreated().getTime());
+		return Optional.of(date);
+	}
+	
+	private String getTEM(String cid) {
+        if (turnitinConn.isUseSourceParameter()) {
+            return getInstructorInfo(cid).get("uem").toString();
+        } else {
+            return turnitinConn.getDefaultInstructorEmail();
+        }
+    }
+	
+	/**
+	 * This returns the String that will be used as the Assignment Title
+	 * in Turn It In.
+	 *
+	 * The current implementation here has a few interesting caveats so that
+	 * it will work with both, the existing Assignments 1 integration, and
+	 * the new Assignments 2 integration under development.
+	 *
+	 * We will check and see if the taskId starts with /assignment/. If it
+	 * does we will look up the Assignment Entity on the legacy Entity bus.
+	 * (not the entitybroker).  This needs some general work to be made
+	 * generally modular ( and useful for more than just Assignments 1 and 2
+	 * ). We will need to look at some more concrete use cases and then
+	 * factor it accordingly in the future when the next scenerio is
+	 * required.
+	 *
+	 * Another oddity is that to get rid of our hard dependency on Assignments 1
+	 * we are invoking the getTitle method by hand. We probably need a
+	 * mechanism to register a title handler or something as part of the
+	 * setup process for new services that want to be reviewable.
+	 *
+	 * @param taskId
+	 * @return
+	 */
+	private String getAssignmentTitle(String taskId){
+		String togo = taskId;
+		if (taskId.startsWith("/assignment/")) {
+			try {
+				Reference ref = entityManager.newReference(taskId);
+				log.debug("got ref " + ref + " of type: " + ref.getType());
+				EntityProducer ep = ref.getEntityProducer();
+
+				Entity ent = ep.getEntity(ref);
+				log.debug("got entity " + ent);
+				String title = scrubSpecialCharacters(ent.getClass().getMethod("getTitle").invoke(ent).toString());
+				log.debug("Got reflected assignemment title from entity " + title);
+				togo = URLDecoder.decode(title,"UTF-8");
+				
+				togo=togo.replaceAll("\\W+","");
+
+			} catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | UnsupportedEncodingException e) {
+				log.debug( e );
+			} catch (Exception e) {
+				log.error( "Unexpected exception getting assignment title", e );
+			}
+		}
+
+		// Turnitin requires Assignment titles to be at least two characters long
+		if (togo.length() == 1) {
+			togo = togo + "_";
+		}
+
+		return togo;
+
+	}
+
+    private String scrubSpecialCharacters(String title) {
+
+        try {
+            if (title.contains("&")) {
+                title = title.replace('&', 'n');
+            }
+            if (title.contains("%")) {
+                title = title.replace("%", "percent");
+            }
+        }
+        catch (Exception e) {
+            log.debug( e );
+        }
+
+        return title;
+    }
+	
+	/*
+	 * Fetch reports on a class by class basis
+	 */
+	@SuppressWarnings({ "deprecation", "unchecked" })
+	private void checkForReportsBulk() {
+
+		SimpleDateFormat dform = ((SimpleDateFormat) DateFormat.getDateInstance());
+		dform.applyPattern(TURNITIN_DATETIME_FORMAT);
+
+		log.info("Fetching reports from Turnitin");
+
+		// get the list of all items that are waiting for reports
+		// but skip items with externalId = null, this happens when the LTI integration's callback fails. In this case, they'll be resubmitted by the queue job.
+		// For the Sakai API integration, we should never enter the report state with externalId = null
+		List<ContentReviewItem> awaitingReport = dao.findByProperties(ContentReviewItem.class,
+				new String[] { "status", "externalId" },
+				new Object[] { ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE, "" },
+				new int[] { dao.EQUALS, dao.NOT_NULL });
+
+		awaitingReport.addAll(dao.findByProperties(ContentReviewItem.class,
+				new String[] { "status", "externalId" },
+				new Object[] { ContentReviewItem.REPORT_ERROR_RETRY_CODE, "" },
+				new int[] { dao.EQUALS, dao.NOT_NULL }));
+
+		Iterator<ContentReviewItem> listIterator = awaitingReport.iterator();
+		HashMap<String, Integer> reportTable = new HashMap<>();
+
+		log.debug("There are " + awaitingReport.size() + " submissions awaiting reports");
+
+		ContentReviewItem currentItem;
+		while (listIterator.hasNext()) {
+			currentItem = (ContentReviewItem) listIterator.next();
+
+			try
+			{
+				// has the item reached its next retry time?
+				if (currentItem.getNextRetryTime() == null)
+					currentItem.setNextRetryTime(new Date());
+
+				else if (currentItem.getNextRetryTime().after(new Date())) {
+					//we haven't reached the next retry time
+					log.info("next retry time not yet reached for item: " + currentItem.getId());
+					dao.update(currentItem);
+					continue;
+				}
+
+				if (currentItem.getRetryCount() == null ) {
+					currentItem.setRetryCount(Long.valueOf(0));
+					currentItem.setNextRetryTime(this.getNextRetryTime(0));
+				} else if (currentItem.getRetryCount().intValue() > maxRetry) {
+					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_EXCEEDED, null, null );
+					continue;
+				} else {
+					log.debug("Still have retries left, continuing. ItemID: " + currentItem.getId());
+					// Moving down to check for report generate speed.
+					//long l = currentItem.getRetryCount().longValue();
+					//l++;
+					//currentItem.setRetryCount(Long.valueOf(l));
+					//currentItem.setNextRetryTime(this.getNextRetryTime(Long.valueOf(l)));
+					//dao.update(currentItem);
+				}
+				
+				Site s;
+				try {
+					s = siteService.getSite(currentItem.getSiteId());
+				}
+				catch (IdUnusedException iue) {
+					log.warn("checkForReportsBulk: Site " + currentItem.getSiteId() + " not found!" + iue.getMessage());
+					long l = currentItem.getRetryCount();
+					l++;
+					currentItem.setRetryCount(l);
+					currentItem.setNextRetryTime(this.getNextRetryTime(l));
+					currentItem.setLastError("Site not found");
+					dao.update(currentItem);
+					continue;
+				}
+				//////////////////////////////  NEW LTI INTEGRATION  ///////////////////////////////
+				Optional<Date> dateOpt = getAssignmentCreationDate(currentItem.getTaskId());
+				if(dateOpt.isPresent() && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, dateOpt.get())){			
+					log.debug("getReviewScore using the LTI integration");			
+					
+					Map<String,String> ltiProps = new HashMap<> ();
+					ltiProps = putInstructorInfo(ltiProps, currentItem.getSiteId());
+					
+					String paperId = currentItem.getExternalId();
+					
+					if(paperId == null){
+						log.warn("Could not find TII paper id for the content " + currentItem.getContentId());
+						long l = currentItem.getRetryCount();
+						l++;
+						currentItem.setRetryCount(l);
+						currentItem.setNextRetryTime(this.getNextRetryTime(l));
+						currentItem.setLastError("Could not find TII paper id for the submission");
+						dao.update(currentItem);
+						continue;
+					}
+					
+					TurnitinReturnValue result = tiiUtil.makeLTIcall(TurnitinLTIUtil.INFO_SUBMISSION, paperId, ltiProps);
+					if(result.getResult() >= 0){
+						currentItem.setReviewScore(result.getResult());
+						currentItem.setStatus(ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE);
+						currentItem.setDateReportReceived(new Date());
+						currentItem.setLastError(null);
+						currentItem.setErrorCode(null);
+						dao.update(currentItem);
+
+						try
+						{
+							ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
+							boolean itemUpdated = updateItemAccess( resource.getId() );
+							if( !itemUpdated )
+							{
+								log.error( "Could not update cr item access status" );
+							}
+						}
+						catch( PermissionException | IdUnusedException | TypeException ex )
+						{
+							log.error( "Could not update cr item access status", ex );
+						}
+
+						//log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
+						log.debug("new report received: " + paperId + " -> " + currentItem.getReviewScore());
+					} else {
+						if(result.getResult() == -7){
+							log.debug("report is still pending for paper " + paperId);
+							currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
+							currentItem.setLastError( result.getErrorMessage() );
+							currentItem.setErrorCode( result.getResult() );
+						} else {
+							log.error("Error making LTI call");
+							long l = currentItem.getRetryCount();
+							l++;
+							currentItem.setRetryCount(l);
+							currentItem.setNextRetryTime(this.getNextRetryTime(l));
+							currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
+							currentItem.setLastError("Report Data Error: " + result.getResult());
+						}
+						dao.update(currentItem);
+					}
+					
+					continue;
+				}
+				//////////////////////////////  OLD API INTEGRATION  ///////////////////////////////
+
+				if (currentItem.getExternalId() == null || currentItem.getExternalId().equals("")) {
+					currentItem.setStatus(Long.valueOf(4));
+					dao.update(currentItem);
+					continue;
+				}
+
+				if (!reportTable.containsKey(currentItem.getExternalId())) {
+					// get the list from turnitin and see if the review is available
+
+					log.debug("Attempting to update hashtable with reports for site " + currentItem.getSiteId());
+
+					String fcmd = "2";
+					String fid = "10";
+
+					try {
+						User user = userDirectoryService.getUser(currentItem.getUserId());
+					} catch (Exception e) {
+						log.error("Unable to look up user: " + currentItem.getUserId() + " for contentItem: " + currentItem.getId(), e);
+					}
+
+					String cid = currentItem.getSiteId();
+					String tem = getTEM(cid);
+
+					String utp = "2";
+
+					String assignid = currentItem.getTaskId();
+
+					String assign = currentItem.getTaskId();
+					String ctl = currentItem.getSiteId();
+
+					// TODO FIXME Current sgithens
+					// Move the update setRetryAttempts to here, and first call and
+					// check the assignment from TII to see if the generate until
+					// due is enabled. In that case we don't want to waste retry
+					// attempts and should just continue.
+					try {
+						// TODO FIXME This is broken at the moment because we need
+						// to have a userid, but this is assuming it's coming from
+						// the thread, but we're in a quartz job.
+						//Map curasnn = getAssignment(currentItem.getSiteId(), currentItem.getTaskId());
+						// TODO FIXME Parameterize getAssignment method to take user information
+						Map getAsnnParams = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+								"assign", getAssignmentTitle(currentItem.getTaskId()), "assignid", currentItem.getTaskId(), "cid", currentItem.getSiteId(), "ctl", currentItem.getSiteId(),
+								"fcmd", "7", "fid", "4", "utp", "2" );
+
+						getAsnnParams.putAll(getInstructorInfo(currentItem.getSiteId()));
+
+						Map curasnn = turnitinConn.callTurnitinReturnMap(getAsnnParams);
+
+						if (curasnn.containsKey("object")) {
+							Map curasnnobj = (Map) curasnn.get("object");
+							String reportGenSpeed = (String) curasnnobj.get("generate");
+							String duedate = (String) curasnnobj.get("dtdue");
+							SimpleDateFormat retform = ((SimpleDateFormat) DateFormat.getDateInstance());
+							retform.applyPattern(TURNITIN_DATETIME_FORMAT);
+							Date duedateObj = null;
+							try {
+								if (duedate != null) {
+									duedateObj = retform.parse(duedate);
+								}
+							} catch (ParseException pe) {
+								log.warn("Unable to parse turnitin dtdue: " + duedate, pe);
+							}
+							if (reportGenSpeed != null && duedateObj != null &&
+								reportGenSpeed.equals("2") && duedateObj.after(new Date())) {
+								log.info("Report generate speed is 2, skipping for now. ItemID: " + currentItem.getId());
+								// If there was previously a transient error for this item, reset the status
+								if (ContentReviewItem.REPORT_ERROR_RETRY_CODE.equals(currentItem.getStatus())) {
+									currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
+									currentItem.setLastError(null);
+									currentItem.setErrorCode(null);
+									dao.update(currentItem);
+								}
+								continue;
+							}
+							else {
+								log.debug("Incrementing retry count for currentItem: " + currentItem.getId());
+								long l = currentItem.getRetryCount();
+								l++;
+								currentItem.setRetryCount(l);
+								currentItem.setNextRetryTime(this.getNextRetryTime(l));
+								dao.update(currentItem);
+							}
+						}
+					} catch (SubmissionException | TransientSubmissionException e) {
+						log.error("Unable to check the report gen speed of the asnn for item: " + currentItem.getId(), e);
+					}
+
+					Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+								"fid", fid,
+								"fcmd", fcmd,
+								"tem", tem,
+								"assign", assign,
+								"assignid", assignid,
+								"cid", cid,
+								"ctl", ctl,
+								"utp", utp
+						);
+						params.putAll(getInstructorInfo(currentItem.getSiteId()));
+
+					Document document;
+
+					try {
+						document = turnitinConn.callTurnitinReturnDocument(params);
+					}
+					catch (TransientSubmissionException e) {
+						log.warn("Update failed due to TransientSubmissionException error: " + e.toString(), e);
+						currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
+						currentItem.setLastError(e.getMessage());
+						dao.update(currentItem);
+						break;
+					}
+					catch (SubmissionException e) {
+						log.warn("Update failed due to SubmissionException error: " + e.toString(), e);
+						currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
+						currentItem.setLastError(e.getMessage());
+						dao.update(currentItem);
+						break;
+					}
+
+					Element root = document.getDocumentElement();
+					if (((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("72") == 0) {
+						log.debug("Report list returned successfully");
+
+						NodeList objects = root.getElementsByTagName("object");
+						String objectId;
+						String similarityScore;
+						String overlap = "";
+						log.debug(objects.getLength() + " objects in the returned list");
+						for (int i=0; i<objects.getLength(); i++) {
+							similarityScore = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("similarityScore").item(0).getFirstChild())).getData().trim();
+							objectId = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("objectID").item(0).getFirstChild())).getData().trim();
+							if (similarityScore.compareTo("-1") != 0) {
+								overlap = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("overlap").item(0).getFirstChild())).getData().trim();
+								reportTable.put(objectId, Integer.valueOf(overlap));
+							} else {
+								reportTable.put(objectId, -1);
+							}
+
+							log.debug("objectId: " + objectId + " similarity: " + similarityScore + " overlap: " + overlap);
+						}
+					} else {
+						log.debug("Report list request not successful");
+						log.debug(document.getTextContent());
+
+					}
+				}
+
+				int reportVal;
+				// check if the report value is now there (there may have been a
+				// failure to get the list above)
+				if (reportTable.containsKey(currentItem.getExternalId())) {
+					reportVal = ((reportTable.get(currentItem.getExternalId())));
+					log.debug("reportVal for " + currentItem.getExternalId() + ": " + reportVal);
+					if (reportVal != -1) {
+						currentItem.setReviewScore(reportVal);
+						currentItem.setStatus(ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE);
+						currentItem.setDateReportReceived(new Date());
+						currentItem.setLastError(null);
+						currentItem.setErrorCode(null);
+						dao.update(currentItem);
+
+						try
+						{
+							ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
+							boolean itemUpdated = updateItemAccess( resource.getId() );
+							if( !itemUpdated )
+							{
+								log.error( "Could not update cr item access status" );
+							}
+						}
+						catch( PermissionException | IdUnusedException | TypeException ex )
+						{
+							log.error( "Could not update cr item access status", ex );
+						}
+
+						log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
+					}
+				}
+			}
+			catch (Exception e)
+			{
+				log.error(e.getMessage() + "\n" + e.getStackTrace());
+			}
+		}
+
+		log.info("Finished fetching reports from Turnitin");
+	}
+	
+	// TII-157	--bbailla2
+	/**
+	 * Inserts (key, value) into a Map<String, Set<String>> such that value is inserted into the value Set associated with key.
+	 * The value set is implemented as a TreeSet, so the Strings will be in alphabetical order
+	 * Eg. if we insert (a, b) and (a, c) into map, then map.get(a) will return {b, c}
+	 */
+	private void appendToMap(Map<String, SortedSet<String>> map, String key, String value)
+	{
+		SortedSet<String> valueList = map.get(key);
+		if (valueList == null)
+		{
+			valueList = new TreeSet<>();
+			map.put(key, valueList);
+		}
+		valueList.add(value);
+	}
+	
+	// SAK-27857	--bbailla2
+	public String[] getAcceptableFileExtensions()
+	{
+		String[] extensions = serverConfigurationService.getStrings(TurnitinConstants.SAK_PROP_ACCEPTABLE_FILE_EXTENSIONS);
+		if (extensions != null && extensions.length > 0)
+		{
+			return extensions;
+		}
+		return TurnitinConstants.DEFAULT_ACCEPTABLE_FILE_EXTENSIONS;
+	}
+
+	// TII-157	--bbailla2
+	public String[] getAcceptableMimeTypes()
+	{
+		String[] mimeTypes = serverConfigurationService.getStrings(TurnitinConstants.SAK_PROP_ACCEPTABLE_MIME_TYPES);
+		if (mimeTypes != null && mimeTypes.length > 0)
+		{
+			return mimeTypes;
+		}
+		return TurnitinConstants.DEFAULT_ACCEPTABLE_MIME_TYPES;
+	}
+	
+	// TII-157	--bbailla2
+	public String [] getAcceptableFileTypes()
+	{
+		// TIITODO: no default value?
+		return serverConfigurationService.getStrings(TurnitinConstants.SAK_PROP_ACCEPTABLE_FILE_TYPES);
 	}
 }
