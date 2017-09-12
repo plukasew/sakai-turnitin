@@ -124,7 +124,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 {
 	public static final String TURNITIN_DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
 
-	private static final String SERVICE_NAME="Turnitin";
+	
 
 	// Site property to enable or disable use of Turnitin for the site
 	private static final String TURNITIN_SITE_PROPERTY = "turnitin";
@@ -132,84 +132,6 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 	final static long LOCK_PERIOD = 12000000;
 
 	private List<String> enabledSiteTypes;
-
-	// These are error messages from turnitin for which the item should never be retried, because it will never recover (Eg. less than 20 words, invalid file, etc.)
-	private Set<String> terminalQueueErrors;
-
-	// Define Turnitin's acceptable file extensions and MIME types, order of these arrays DOES matter
-	private final String[] DEFAULT_ACCEPTABLE_FILE_EXTENSIONS = new String[] {
-		".doc", 
-		".docx", 
-		".xls", 
-		".xls", 
-		".xls", 
-		".xls", 
-		".xlsx", 
-		".ppt", 
-		".ppt", 
-		".ppt", 
-		".ppt", 
-		".pptx", 
-		".pps", 
-		".pps", 
-		".ppsx", 
-		".pdf", 
-		".ps", 
-		".eps", 
-		".txt", 
-		".html", 
-		".htm", 
-		".wpd", 
-		".wpd", 
-		".odt", 
-		".rtf", 
-		".rtf", 
-		".rtf", 
-		".rtf", 
-		".hwp"
-	};
-	private final String[] DEFAULT_ACCEPTABLE_MIME_TYPES = new String[] {
-		"application/msword", 
-		"application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
-		"application/excel", 
-		"application/vnd.ms-excel", 
-		"application/x-excel", 
-		"application/x-msexcel", 
-		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-		"application/mspowerpoint", 
-		"application/powerpoint", 
-		"application/vnd.ms-powerpoint", 
-		"application/x-mspowerpoint", 
-		"application/vnd.openxmlformats-officedocument.presentationml.presentation", 
-		"application/mspowerpoint", 
-		"application/vnd.ms-powerpoint", 
-		"application/vnd.openxmlformats-officedocument.presentationml.slideshow", 
-		"application/pdf", 
-		"application/postscript", 
-		"application/postscript", 
-		"text/plain", 
-		"text/html", 
-		"text/html", 
-		"application/wordperfect", 
-		"application/x-wpwin", 
-		"application/vnd.oasis.opendocument.text", 
-		"text/rtf", 
-		"application/rtf", 
-		"application/x-rtf", 
-		"text/richtext", 
-		"application/x-hwp"
-	};
-
-	// Sakai.properties overriding the arrays above
-	private final String PROP_ACCEPT_ALL_FILES = "turnitin.accept.all.files";
-
-	private final String PROP_ACCEPTABLE_FILE_EXTENSIONS = "turnitin.acceptable.file.extensions";
-	private final String PROP_ACCEPTABLE_MIME_TYPES = "turnitin.acceptable.mime.types";
-
-	// A list of the displayable file types (ie. "Microsoft Word", "WordPerfect document", "Postscript", etc.)
-	private final String PROP_ACCEPTABLE_FILE_TYPES = "turnitin.acceptable.file.types";
-
-	private final String KEY_FILE_TYPE_PREFIX = "file.type";
 
 	/**
 	 *  Setters
@@ -221,11 +143,6 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 
 	public void setEntityManager(EntityManager en){
 		this.entityManager = en;
-	}
-
-	private ContentHostingService contentHostingService;
-	public void setContentHostingService(ContentHostingService contentHostingService) {
-		this.contentHostingService = contentHostingService;
 	}
 
 	private SakaiPersonManager sakaiPersonManager;
@@ -245,11 +162,6 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		this.userDirectoryService = userDirectoryService;
 	}
 
-	private SiteService siteService;
-	public void setSiteService(SiteService siteService) {
-		this.siteService = siteService;
-	}
-
 	private SqlService sqlService;
 	public void setSqlService(SqlService sql) {
 		sqlService = sql;
@@ -259,16 +171,6 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 	private PreferencesService preferencesService;
 	public void setPreferencesService(PreferencesService preferencesService) {
 		this.preferencesService = preferencesService;
-	}
-
-	private TurnitinContentValidator turnitinContentValidator;
-	public void setTurnitinContentValidator(TurnitinContentValidator turnitinContentValidator) {
-		this.turnitinContentValidator = turnitinContentValidator;
-	}
-	
-	private TurnitinLTIUtil tiiUtil;
-	public void setTiiUtil(TurnitinLTIUtil tiiUtil) {
-		this.tiiUtil = tiiUtil;
 	}
 	
 	private SessionManager sessionManager;
@@ -294,16 +196,12 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 	 */
 
 	public void init() {
+		
+		// TIITODO: super.init()?
 
 		enabledSiteTypes = Arrays.asList(ArrayUtils.nullToEmpty(serverConfigurationService.getStrings("turnitin.sitetypes")));
 
-		String[] strTerminalQueueErrors = serverConfigurationService.getStrings("turnitin.terminalQueueErrors");
-		if (strTerminalQueueErrors == null)
-		{
-			strTerminalQueueErrors = new String[]{"Your submission does not contain valid text.", "Your submission must contain 20 words or more.", "You must upload a supported file type for this assignment."};
-		}
-		terminalQueueErrors = new HashSet<>(strTerminalQueueErrors.length);
-		Collections.addAll(terminalQueueErrors, strTerminalQueueErrors);
+
 
 
 
@@ -322,46 +220,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 
 	}
 
-	public String getServiceName() {
-		return SERVICE_NAME;
-	}
 
-	/**
-	 * Allow Turnitin for this site?
-	 * @param s
-	 * @return 
-	 */
-	public boolean isSiteAcceptable(Site s) {
-
-		if (s == null) {
-			return false;
-		}
-
-		log.debug("isSiteAcceptable: " + s.getId() + " / " + s.getTitle());
-
-		// Delegated to another bean
-		if (siteAdvisor != null) {
-			return siteAdvisor.siteCanUseReviewService(s);
-		}
-
-		// Check site property
-		ResourceProperties properties = s.getProperties();
-
-                String prop = (String) properties.get(TURNITIN_SITE_PROPERTY);
-                if (prop != null) {
-			log.debug("Using site property: " + prop);
-                        return Boolean.parseBoolean(prop);
-                }
-
-		// Check list of allowed site types, if defined
-		if (enabledSiteTypes != null && !enabledSiteTypes.isEmpty()) {
-			log.debug("Using site type: " + s.getType());
-			return enabledSiteTypes.contains(s.getType());
-		}
-
-		// No property set, no restriction on site types, so allow
-        return true; 
-    }
 	
 	public boolean isDirectAccess(Site s) {
 		if (s == null) {
@@ -976,127 +835,9 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
                 securityService.popAdvisor();
         }
 
-	/**
-	 * This method was originally private, but is being made public for the
-	 * moment so we can run integration tests. TODO Revisit this decision.
-	 *
-	 * @param siteId
-	 * @throws SubmissionException
-	 * @throws TransientSubmissionException
-	 */
-	@SuppressWarnings("unchecked")
-	public void createClass(String siteId) throws SubmissionException, TransientSubmissionException {
-		log.debug("Creating class for site: " + siteId);
+	
 
-		String cpw = defaultClassPassword;
-		String ctl = siteId;
-		String fcmd = "2";
-		String fid = "2";
-		String utp = "2"; 					//user type 2 = instructor
-		String cid = siteId;
-
-		Document document;
-
-		Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
-				"cid", cid,
-				"cpw", cpw,
-				"ctl", ctl,
-				"fcmd", fcmd,
-				"fid", fid,
-				"utp", utp
-		);
-
-		params.putAll(getInstructorInfo(siteId));
-
-		document = turnitinConn.callTurnitinReturnDocument(params);
-
-		Element root = document.getDocumentElement();
-		String rcode = ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim();
-
-		if (((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("20") == 0 ||
-				((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("21") == 0 ) {
-			log.debug("Create Class successful");
-		} else {
-			if ("218".equals(rcode) || "9999".equals(rcode)) {
-				throw new TransientSubmissionException("Create Class not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim());
-			} else {
-				throw new SubmissionException("Create Class not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim());
-			}
-		}
-	}
-
-	/**
-	 * This returns the String that will be used as the Assignment Title
-	 * in Turn It In.
-	 *
-	 * The current implementation here has a few interesting caveats so that
-	 * it will work with both, the existing Assignments 1 integration, and
-	 * the new Assignments 2 integration under development.
-	 *
-	 * We will check and see if the taskId starts with /assignment/. If it
-	 * does we will look up the Assignment Entity on the legacy Entity bus.
-	 * (not the entitybroker).  This needs some general work to be made
-	 * generally modular ( and useful for more than just Assignments 1 and 2
-	 * ). We will need to look at some more concrete use cases and then
-	 * factor it accordingly in the future when the next scenerio is
-	 * required.
-	 *
-	 * Another oddity is that to get rid of our hard dependency on Assignments 1
-	 * we are invoking the getTitle method by hand. We probably need a
-	 * mechanism to register a title handler or something as part of the
-	 * setup process for new services that want to be reviewable.
-	 *
-	 * @param taskId
-	 * @return
-	 */
-	private String getAssignmentTitle(String taskId){
-		String togo = taskId;
-		if (taskId.startsWith("/assignment/")) {
-			try {
-				Reference ref = entityManager.newReference(taskId);
-				log.debug("got ref " + ref + " of type: " + ref.getType());
-				EntityProducer ep = ref.getEntityProducer();
-
-				Entity ent = ep.getEntity(ref);
-				log.debug("got entity " + ent);
-				String title = scrubSpecialCharacters(ent.getClass().getMethod("getTitle").invoke(ent).toString());
-				log.debug("Got reflected assignemment title from entity " + title);
-				togo = URLDecoder.decode(title,"UTF-8");
-				
-				togo=togo.replaceAll("\\W+","");
-
-			} catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | UnsupportedEncodingException e) {
-				log.debug( e );
-			} catch (Exception e) {
-				log.error( "Unexpected exception getting assignment title", e );
-			}
-		}
-
-		// Turnitin requires Assignment titles to be at least two characters long
-		if (togo.length() == 1) {
-			togo = togo + "_";
-		}
-
-		return togo;
-
-	}
-
-    private String scrubSpecialCharacters(String title) {
-
-        try {
-            if (title.contains("&")) {
-                title = title.replace('&', 'n');
-            }
-            if (title.contains("%")) {
-                title = title.replace("%", "percent");
-            }
-        }
-        catch (Exception e) {
-            log.debug( e );
-        }
-
-        return title;
-    }
+	
 
 	/**
 	 * @param siteId
@@ -1141,24 +882,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		turnitinConn.callTurnitinReturnMap(params);
 	}
 
-	/**
-	 * Creates or Updates an Assignment
-	 *
-	 * This method will look at the current user or default instructor for it's
-	 * user information.
-	 *
-	 *
-	 * @param siteId
-	 * @param taskId an assignment reference
-	 * @param extraAsnOpts
-	 * @throws SubmissionException
-	 * @throws TransientSubmissionException
-	 */
-	@SuppressWarnings("unchecked")
-	@Override
-	public void createAssignment(String siteId, String asnId, Map<String, Object> extraAsnOpts) throws SubmissionException, TransientSubmissionException {
-		syncAssignment(siteId, asnId, extraAsnOpts, null);
-	}
+
 
 	/**
 	 * @inheritDoc
@@ -1757,78 +1481,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 	}
 
 
-	/**
-	 * Currently public for integration tests. TODO Revisit visibility of
-	 * method.
-	 *
-	 * @param userId
-	 * @param uem
-	 * @param siteId
-	 * @throws SubmissionException
-	 * @throws org.sakaiproject.contentreview.exception.TransientSubmissionException
-	 */
-	public void enrollInClass(String userId, String uem, String siteId) throws SubmissionException, TransientSubmissionException {
-
-		String uid = userId;
-		String cid = siteId;
-
-		String ctl = siteId;
-		String fid = "3";
-		String fcmd = "2";
-		String tem = getTEM(cid);
-
-		User user;
-		try {
-			user = userDirectoryService.getUser(userId);
-		} catch (Exception t) {
-			throw new SubmissionException ("Cannot get user information", t);
-		}
-
-		log.debug("Enrolling user " + user.getEid() + "(" + userId + ")  in class " + siteId);
-
-		String ufn = getUserFirstName(user);
-		if (ufn == null) {
-			throw new SubmissionException ("User has no first name");
-		}
-
-		String uln = getUserLastName(user);
-		if (uln == null) {
-			throw new SubmissionException ("User has no last name");
-		}
-
-		String utp = "1";
-
-		Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
-				"fid", fid,
-				"fcmd", fcmd,
-				"cid", cid,
-				"tem", tem,
-				"ctl", ctl,
-				"dis", studentAccountNotified ? "0" : "1",
-				"uem", uem,
-				"ufn", ufn,
-				"uln", uln,
-				"utp", utp,
-				"uid", uid
-		);
-
-		Document document = turnitinConn.callTurnitinReturnDocument(params);
-
-		Element root = document.getDocumentElement();
-
-		String rMessage = ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData();
-		String rCode = ((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData();
-		if ("31".equals(rCode)) {
-			log.debug("Results from enrollInClass with user + " + userId + " and class title: " + ctl + ".\n" +
-					"rCode: " + rCode + " rMessage: " + rMessage);
-		} else {
-			//certain return codes need to be logged
-			log.warn("Results from enrollInClass with user + " + userId + " and class title: " + ctl + ". " +
-					"rCode: " + rCode + ", rMessage: " + rMessage);
-			//TODO for certain types we should probably throw an exception here and stop the proccess
-		}
-
-	}
+	
 
 	/*
 	 * Obtain a lock on the item
@@ -1943,393 +1596,13 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 
 	
 
-	public String escapeFileName(String fileName, String contentId) {
-		log.debug("original filename is: " + fileName);
-		if (fileName == null) {
-			//use the id
-			fileName  = contentId;
-		} else if (fileName.length() > 199) {
-			fileName = fileName.substring(0, 199);
-		}
-		log.debug("fileName is :" + fileName);
-		try {
-			fileName = URLDecoder.decode(fileName, "UTF-8");
-			//in rare cases it seems filenames can be double encoded
-			while (fileName.indexOf("%20")> 0 || fileName.contains("%2520") ) {
-				try {
-					fileName = URLDecoder.decode(fileName, "UTF-8");
-				}
-				catch (IllegalArgumentException eae) {
-					log.warn("Unable to decode fileName: " + fileName, eae);
-					//as the result is likely to cause a MD5 exception use the ID
-					return contentId;
-				}
-			}
-		}
-		catch (IllegalArgumentException eae) {
-			log.warn("Unable to decode fileName: " + fileName, eae);
-			return contentId;
-		} catch (UnsupportedEncodingException e) {
-			log.debug( e );
-		}
 
-		fileName = fileName.replace(' ', '_');
-		//its possible we have double _ as a result of this lets do some cleanup
-		fileName = StringUtils.replace(fileName, "__", "_");
 
-		log.debug("fileName is :" + fileName);
-		return fileName;
-	}
+	
 
-	private String truncateFileName(String fileName, int i) {
-		//get the extension for later re-use
-		String extension = "";
-		if (fileName.contains(".")) {
-			 extension = fileName.substring(fileName.lastIndexOf("."));
-		}
 
-		fileName = fileName.substring(0, i - extension.length());
-		fileName = fileName + extension;
 
-		return fileName;
-	}
-
-	public void checkForReports() {
-		checkForReportsBulk();
-	}
-
-	/*
-	 * Fetch reports on a class by class basis
-	 */
-	@SuppressWarnings({ "deprecation", "unchecked" })
-	public void checkForReportsBulk() {
-
-		SimpleDateFormat dform = ((SimpleDateFormat) DateFormat.getDateInstance());
-		dform.applyPattern(TURNITIN_DATETIME_FORMAT);
-
-		log.info("Fetching reports from Turnitin");
-
-		// get the list of all items that are waiting for reports
-		// but skip items with externalId = null, this happens when the LTI integration's callback fails. In this case, they'll be resubmitted by the queue job.
-		// For the Sakai API integration, we should never enter the report state with externalId = null
-		List<ContentReviewItem> awaitingReport = dao.findByProperties(ContentReviewItem.class,
-				new String[] { "status", "externalId" },
-				new Object[] { ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE, "" },
-				new int[] { dao.EQUALS, dao.NOT_NULL });
-
-		awaitingReport.addAll(dao.findByProperties(ContentReviewItem.class,
-				new String[] { "status", "externalId" },
-				new Object[] { ContentReviewItem.REPORT_ERROR_RETRY_CODE, "" },
-				new int[] { dao.EQUALS, dao.NOT_NULL }));
-
-		Iterator<ContentReviewItem> listIterator = awaitingReport.iterator();
-		HashMap<String, Integer> reportTable = new HashMap<>();
-
-		log.debug("There are " + awaitingReport.size() + " submissions awaiting reports");
-
-		ContentReviewItem currentItem;
-		while (listIterator.hasNext()) {
-			currentItem = (ContentReviewItem) listIterator.next();
-
-			try
-			{
-				// has the item reached its next retry time?
-				if (currentItem.getNextRetryTime() == null)
-					currentItem.setNextRetryTime(new Date());
-
-				else if (currentItem.getNextRetryTime().after(new Date())) {
-					//we haven't reached the next retry time
-					log.info("next retry time not yet reached for item: " + currentItem.getId());
-					dao.update(currentItem);
-					continue;
-				}
-
-				if (currentItem.getRetryCount() == null ) {
-					currentItem.setRetryCount(Long.valueOf(0));
-					currentItem.setNextRetryTime(this.getNextRetryTime(0));
-				} else if (currentItem.getRetryCount().intValue() > maxRetry) {
-					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_EXCEEDED, null, null );
-					continue;
-				} else {
-					log.debug("Still have retries left, continuing. ItemID: " + currentItem.getId());
-					// Moving down to check for report generate speed.
-					//long l = currentItem.getRetryCount().longValue();
-					//l++;
-					//currentItem.setRetryCount(Long.valueOf(l));
-					//currentItem.setNextRetryTime(this.getNextRetryTime(Long.valueOf(l)));
-					//dao.update(currentItem);
-				}
-				
-				Site s;
-				try {
-					s = siteService.getSite(currentItem.getSiteId());
-				}
-				catch (IdUnusedException iue) {
-					log.warn("checkForReportsBulk: Site " + currentItem.getSiteId() + " not found!" + iue.getMessage());
-					long l = currentItem.getRetryCount();
-					l++;
-					currentItem.setRetryCount(l);
-					currentItem.setNextRetryTime(this.getNextRetryTime(l));
-					currentItem.setLastError("Site not found");
-					dao.update(currentItem);
-					continue;
-				}
-				//////////////////////////////  NEW LTI INTEGRATION  ///////////////////////////////
-				Optional<Date> dateOpt = getAssignmentCreationDate(currentItem.getTaskId());
-				if(dateOpt.isPresent() && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, dateOpt.get())){			
-					log.debug("getReviewScore using the LTI integration");			
-					
-					Map<String,String> ltiProps = new HashMap<> ();
-					ltiProps = putInstructorInfo(ltiProps, currentItem.getSiteId());
-					
-					String paperId = currentItem.getExternalId();
-					
-					if(paperId == null){
-						log.warn("Could not find TII paper id for the content " + currentItem.getContentId());
-						long l = currentItem.getRetryCount();
-						l++;
-						currentItem.setRetryCount(l);
-						currentItem.setNextRetryTime(this.getNextRetryTime(l));
-						currentItem.setLastError("Could not find TII paper id for the submission");
-						dao.update(currentItem);
-						continue;
-					}
-					
-					TurnitinReturnValue result = tiiUtil.makeLTIcall(TurnitinLTIUtil.INFO_SUBMISSION, paperId, ltiProps);
-					if(result.getResult() >= 0){
-						currentItem.setReviewScore(result.getResult());
-						currentItem.setStatus(ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE);
-						currentItem.setDateReportReceived(new Date());
-						currentItem.setLastError(null);
-						currentItem.setErrorCode(null);
-						dao.update(currentItem);
-
-						try
-						{
-							ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
-							boolean itemUpdated = updateItemAccess( resource.getId() );
-							if( !itemUpdated )
-							{
-								log.error( "Could not update cr item access status" );
-							}
-						}
-						catch( PermissionException | IdUnusedException | TypeException ex )
-						{
-							log.error( "Could not update cr item access status", ex );
-						}
-
-						//log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
-						log.debug("new report received: " + paperId + " -> " + currentItem.getReviewScore());
-					} else {
-						if(result.getResult() == -7){
-							log.debug("report is still pending for paper " + paperId);
-							currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
-							currentItem.setLastError( result.getErrorMessage() );
-							currentItem.setErrorCode( result.getResult() );
-						} else {
-							log.error("Error making LTI call");
-							long l = currentItem.getRetryCount();
-							l++;
-							currentItem.setRetryCount(l);
-							currentItem.setNextRetryTime(this.getNextRetryTime(l));
-							currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
-							currentItem.setLastError("Report Data Error: " + result.getResult());
-						}
-						dao.update(currentItem);
-					}
-					
-					continue;
-				}
-				//////////////////////////////  OLD API INTEGRATION  ///////////////////////////////
-
-				if (currentItem.getExternalId() == null || currentItem.getExternalId().equals("")) {
-					currentItem.setStatus(Long.valueOf(4));
-					dao.update(currentItem);
-					continue;
-				}
-
-				if (!reportTable.containsKey(currentItem.getExternalId())) {
-					// get the list from turnitin and see if the review is available
-
-					log.debug("Attempting to update hashtable with reports for site " + currentItem.getSiteId());
-
-					String fcmd = "2";
-					String fid = "10";
-
-					try {
-						User user = userDirectoryService.getUser(currentItem.getUserId());
-					} catch (Exception e) {
-						log.error("Unable to look up user: " + currentItem.getUserId() + " for contentItem: " + currentItem.getId(), e);
-					}
-
-					String cid = currentItem.getSiteId();
-					String tem = getTEM(cid);
-
-					String utp = "2";
-
-					String assignid = currentItem.getTaskId();
-
-					String assign = currentItem.getTaskId();
-					String ctl = currentItem.getSiteId();
-
-					// TODO FIXME Current sgithens
-					// Move the update setRetryAttempts to here, and first call and
-					// check the assignment from TII to see if the generate until
-					// due is enabled. In that case we don't want to waste retry
-					// attempts and should just continue.
-					try {
-						// TODO FIXME This is broken at the moment because we need
-						// to have a userid, but this is assuming it's coming from
-						// the thread, but we're in a quartz job.
-						//Map curasnn = getAssignment(currentItem.getSiteId(), currentItem.getTaskId());
-						// TODO FIXME Parameterize getAssignment method to take user information
-						Map getAsnnParams = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
-								"assign", getAssignmentTitle(currentItem.getTaskId()), "assignid", currentItem.getTaskId(), "cid", currentItem.getSiteId(), "ctl", currentItem.getSiteId(),
-								"fcmd", "7", "fid", "4", "utp", "2" );
-
-						getAsnnParams.putAll(getInstructorInfo(currentItem.getSiteId()));
-
-						Map curasnn = turnitinConn.callTurnitinReturnMap(getAsnnParams);
-
-						if (curasnn.containsKey("object")) {
-							Map curasnnobj = (Map) curasnn.get("object");
-							String reportGenSpeed = (String) curasnnobj.get("generate");
-							String duedate = (String) curasnnobj.get("dtdue");
-							SimpleDateFormat retform = ((SimpleDateFormat) DateFormat.getDateInstance());
-							retform.applyPattern(TURNITIN_DATETIME_FORMAT);
-							Date duedateObj = null;
-							try {
-								if (duedate != null) {
-									duedateObj = retform.parse(duedate);
-								}
-							} catch (ParseException pe) {
-								log.warn("Unable to parse turnitin dtdue: " + duedate, pe);
-							}
-							if (reportGenSpeed != null && duedateObj != null &&
-								reportGenSpeed.equals("2") && duedateObj.after(new Date())) {
-								log.info("Report generate speed is 2, skipping for now. ItemID: " + currentItem.getId());
-								// If there was previously a transient error for this item, reset the status
-								if (ContentReviewItem.REPORT_ERROR_RETRY_CODE.equals(currentItem.getStatus())) {
-									currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
-									currentItem.setLastError(null);
-									currentItem.setErrorCode(null);
-									dao.update(currentItem);
-								}
-								continue;
-							}
-							else {
-								log.debug("Incrementing retry count for currentItem: " + currentItem.getId());
-								long l = currentItem.getRetryCount();
-								l++;
-								currentItem.setRetryCount(l);
-								currentItem.setNextRetryTime(this.getNextRetryTime(l));
-								dao.update(currentItem);
-							}
-						}
-					} catch (SubmissionException | TransientSubmissionException e) {
-						log.error("Unable to check the report gen speed of the asnn for item: " + currentItem.getId(), e);
-					}
-
-					Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
-								"fid", fid,
-								"fcmd", fcmd,
-								"tem", tem,
-								"assign", assign,
-								"assignid", assignid,
-								"cid", cid,
-								"ctl", ctl,
-								"utp", utp
-						);
-						params.putAll(getInstructorInfo(currentItem.getSiteId()));
-
-					Document document;
-
-					try {
-						document = turnitinConn.callTurnitinReturnDocument(params);
-					}
-					catch (TransientSubmissionException e) {
-						log.warn("Update failed due to TransientSubmissionException error: " + e.toString(), e);
-						currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
-						currentItem.setLastError(e.getMessage());
-						dao.update(currentItem);
-						break;
-					}
-					catch (SubmissionException e) {
-						log.warn("Update failed due to SubmissionException error: " + e.toString(), e);
-						currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
-						currentItem.setLastError(e.getMessage());
-						dao.update(currentItem);
-						break;
-					}
-
-					Element root = document.getDocumentElement();
-					if (((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("72") == 0) {
-						log.debug("Report list returned successfully");
-
-						NodeList objects = root.getElementsByTagName("object");
-						String objectId;
-						String similarityScore;
-						String overlap = "";
-						log.debug(objects.getLength() + " objects in the returned list");
-						for (int i=0; i<objects.getLength(); i++) {
-							similarityScore = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("similarityScore").item(0).getFirstChild())).getData().trim();
-							objectId = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("objectID").item(0).getFirstChild())).getData().trim();
-							if (similarityScore.compareTo("-1") != 0) {
-								overlap = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("overlap").item(0).getFirstChild())).getData().trim();
-								reportTable.put(objectId, Integer.valueOf(overlap));
-							} else {
-								reportTable.put(objectId, -1);
-							}
-
-							log.debug("objectId: " + objectId + " similarity: " + similarityScore + " overlap: " + overlap);
-						}
-					} else {
-						log.debug("Report list request not successful");
-						log.debug(document.getTextContent());
-
-					}
-				}
-
-				int reportVal;
-				// check if the report value is now there (there may have been a
-				// failure to get the list above)
-				if (reportTable.containsKey(currentItem.getExternalId())) {
-					reportVal = ((reportTable.get(currentItem.getExternalId())));
-					log.debug("reportVal for " + currentItem.getExternalId() + ": " + reportVal);
-					if (reportVal != -1) {
-						currentItem.setReviewScore(reportVal);
-						currentItem.setStatus(ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE);
-						currentItem.setDateReportReceived(new Date());
-						currentItem.setLastError(null);
-						currentItem.setErrorCode(null);
-						dao.update(currentItem);
-
-						try
-						{
-							ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
-							boolean itemUpdated = updateItemAccess( resource.getId() );
-							if( !itemUpdated )
-							{
-								log.error( "Could not update cr item access status" );
-							}
-						}
-						catch( PermissionException | IdUnusedException | TypeException ex )
-						{
-							log.error( "Could not update cr item access status", ex );
-						}
-
-						log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
-					}
-				}
-			}
-			catch (Exception e)
-			{
-				log.error(e.getMessage() + "\n" + e.getStackTrace());
-			}
-		}
-
-		log.info("Finished fetching reports from Turnitin");
-	}
+	
 
 	
 
@@ -2472,118 +1745,6 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		}
 	}
 
-	// SAK-27857	--bbailla2
-	public boolean allowAllContent()
-	{
-		// Turntin reports errors when content is submitted that it can't check originality against. So we will block unsupported content.
-		return serverConfigurationService.getBoolean(PROP_ACCEPT_ALL_FILES, false);
-	}
-
-	/* (non-Javadoc)
-	 * @see org.sakaiproject.contentreview.service.ContentReviewService#isAcceptableContent(org.sakaiproject.content.api.ContentResource)
-	 */
-	public boolean isAcceptableContent(ContentResource resource) {
-		return turnitinContentValidator.isAcceptableContent(resource);
-	}
-
-	// SAK-27857	--bbailla2
-	public String[] getAcceptableFileExtensions()
-	{
-		String[] extensions = serverConfigurationService.getStrings(PROP_ACCEPTABLE_FILE_EXTENSIONS);
-		if (extensions != null && extensions.length > 0)
-		{
-			return extensions;
-		}
-		return DEFAULT_ACCEPTABLE_FILE_EXTENSIONS;
-	}
-
-	// TII-157	--bbailla2
-	public String[] getAcceptableMimeTypes()
-	{
-		String[] mimeTypes = serverConfigurationService.getStrings(PROP_ACCEPTABLE_MIME_TYPES);
-		if (mimeTypes != null && mimeTypes.length > 0)
-		{
-			return mimeTypes;
-		}
-		return DEFAULT_ACCEPTABLE_MIME_TYPES;
-	}
-
-	// TII-157	--bbailla2
-	public String [] getAcceptableFileTypes()
-	{
-		return serverConfigurationService.getStrings(PROP_ACCEPTABLE_FILE_TYPES);
-	}
-
-	// TII-157	--bbailla2
-	public Map<String, SortedSet<String>> getAcceptableExtensionsToMimeTypes()
-	{
-		Map<String, SortedSet<String>> acceptableExtensionsToMimeTypes = new HashMap<>();
-		String[] acceptableFileExtensions = getAcceptableFileExtensions();
-		String[] acceptableMimeTypes = getAcceptableMimeTypes();
-		int min = Math.min(acceptableFileExtensions.length, acceptableMimeTypes.length);
-		for (int i = 0; i < min; i++)
-		{
-			appendToMap(acceptableExtensionsToMimeTypes, acceptableFileExtensions[i], acceptableMimeTypes[i]);
-		}
-
-		return acceptableExtensionsToMimeTypes;
-	}
-
-	// TII-157	--bbailla2
-	public Map<String, SortedSet<String>> getAcceptableFileTypesToExtensions()
-	{
-		Map<String, SortedSet<String>> acceptableFileTypesToExtensions = new LinkedHashMap<>();
-		String[] acceptableFileTypes = getAcceptableFileTypes();
-		String[] acceptableFileExtensions = getAcceptableFileExtensions();
-		if (acceptableFileTypes != null && acceptableFileTypes.length > 0)
-		{
-			// The acceptable file types are listed in sakai.properties. Sakai.properties takes precedence.
-			int min = Math.min(acceptableFileTypes.length, acceptableFileExtensions.length);
-			for (int i = 0; i < min; i++)
-			{
-				appendToMap(acceptableFileTypesToExtensions, acceptableFileTypes[i], acceptableFileExtensions[i]);
-			}
-		}
-		else
-		{
-			/*
-			 * acceptableFileTypes not specified in sakai.properties (this is normal).
-			 * Use ResourceLoader to resolve the file types.
-			 * If the resource loader doesn't find the file extenions, log a warning and return the [missing key...] messages
-			 */
-			ResourceLoader resourceLoader = new ResourceLoader("turnitin");
-			for( String fileExtension : acceptableFileExtensions )
-			{
-				String key = KEY_FILE_TYPE_PREFIX + fileExtension;
-				if (!resourceLoader.getIsValid(key))
-				{
-					log.warn("While resolving acceptable file types for Turnitin, the sakai.property " + PROP_ACCEPTABLE_FILE_TYPES + " is not set, and the message bundle " + key + " could not be resolved. Displaying [missing key ...] to the user");
-				}
-				String fileType = resourceLoader.getString(key);
-				appendToMap( acceptableFileTypesToExtensions, fileType, fileExtension );
-			}
-		}
-
-		return acceptableFileTypesToExtensions;
-	}
-
-	// TII-157	--bbailla2
-	/**
-	 * Inserts (key, value) into a Map<String, Set<String>> such that value is inserted into the value Set associated with key.
-	 * The value set is implemented as a TreeSet, so the Strings will be in alphabetical order
-	 * Eg. if we insert (a, b) and (a, c) into map, then map.get(a) will return {b, c}
-	 */
-	private void appendToMap(Map<String, SortedSet<String>> map, String key, String value)
-	{
-		SortedSet<String> valueList = map.get(key);
-		if (valueList == null)
-		{
-			valueList = new TreeSet<>();
-			map.put(key, valueList);
-		}
-		valueList.add(value);
-	}
-
 	public boolean isAcceptableSize(ContentResource resource) {
 		return turnitinContentValidator.isAcceptableSize(resource);
 	}
@@ -2629,14 +1790,6 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		}
 		return getLocalizedStatusMessage(errorCode.toString());
 	}
-
-    private String getTEM(String cid) {
-        if (turnitinConn.isUseSourceParameter()) {
-            return getInstructorInfo(cid).get("uem").toString();
-        } else {
-            return turnitinConn.getDefaultInstructorEmail();
-        }
-    }
 
 	/**
 	 * This will add to the LTI map the information for the instructor such as
@@ -2957,87 +2110,9 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
         return resources;
 	}
 
-	private void processError( ContentReviewItem item, Long status, String error, Integer errorCode )
-	{
-		try
-		{
-			if( status == null )
-			{
-				IllegalArgumentException ex = new IllegalArgumentException( "Status is null; you must supply a valid status to update when calling processError()" );
-				throw ex;
-			}
-			else
-			{
-				item.setStatus( status );
-			}
-			if( error != null )
-			{
-				item.setLastError(error);
-			}
-			if( errorCode != null )
-			{
-				item.setErrorCode( errorCode );
-			}
-
-			dao.update( item );
-
-			// Update urlAccessed to true if status is being updated to one of the dead states (5, 6, 8 and 9)
-			if( isDeadState( status ) )
-			{
-				try
-				{
-					ContentResource resource = contentHostingService.getResource( item.getContentId() );
-					boolean itemUpdated = updateItemAccess( resource.getId() );
-					if (!itemUpdated)
-					{
-						log.error( "Could not update cr item access status" );
-					}
-				}
-				catch( PermissionException | IdUnusedException | TypeException ex )
-				{
-					log.error( "Error updating cr item access status; item id = " + item.getContentId(), ex );
-				}
-			}
-		}
-		finally
-		{
-			releaseLock( item );
-		}
-	}
-
-	/**
-	 * Returns true/false if the given status is one of the 'dead' TII states
-	 * @param status the status to check
-	 * @return true if the status given is of one of the dead states; false otherwise
-	 */
-	private boolean isDeadState( Long status )
-	{
-		return status != null && (status.equals( ContentReviewItem.SUBMISSION_ERROR_NO_RETRY_CODE ) || status.equals( ContentReviewItem.REPORT_ERROR_NO_RETRY_CODE ) 
-			|| status.equals( ContentReviewItem.SUBMISSION_ERROR_RETRY_EXCEEDED ));
-	}
 	
-	private Optional<Date> getAssignmentCreationDate(String assignmentRef)
-	{
-		try
-		{
-			org.sakaiproject.assignment.api.Assignment asn = assignmentService.getAssignment(assignmentRef);
-			return getAssignmentCreationDate(asn);
-		}
-		catch(IdUnusedException | PermissionException e)
-		{
-			return Optional.empty();
-		}
-	}
+	
 
-	private Optional<Date> getAssignmentCreationDate(org.sakaiproject.assignment.api.Assignment asn)
-	{
-		if (asn == null)
-		{
-			return Optional.empty();
-		}
-		Date date = new Date(asn.getTimeCreated().getTime());
-		return Optional.of(date);
-	}
 
 	/**
 	 * A simple SecurityAdviser that can be used to override permissions for one user for one function.

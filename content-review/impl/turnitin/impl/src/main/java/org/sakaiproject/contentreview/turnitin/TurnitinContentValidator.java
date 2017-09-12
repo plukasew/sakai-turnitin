@@ -18,7 +18,7 @@
  * limitations under the License.
  *
  **********************************************************************************/
-package org.sakaiproject.contentreview.impl.turnitin;
+package org.sakaiproject.contentreview.turnitin;
 
 import java.io.IOException;
 import java.util.Collection;

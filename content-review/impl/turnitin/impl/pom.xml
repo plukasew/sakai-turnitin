@@ -36,6 +36,11 @@
             <artifactId>sakai-contentreview-hbm</artifactId>
 			<version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.sakaiproject.contentreview.turnitin</groupId>
+            <artifactId>content-review-turnitin-impl-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 		<!-- Spring dependencies. -->
 		<dependency>
 			<groupId>org.springframework</groupId>
