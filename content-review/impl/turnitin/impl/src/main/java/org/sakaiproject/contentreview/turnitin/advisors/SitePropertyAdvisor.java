@@ -25,44 +25,48 @@ import org.sakaiproject.contentreview.advisors.ContentReviewSiteAdvisor;
 import org.sakaiproject.entity.api.ResourceProperties;
 import org.sakaiproject.site.api.Site;
 
-public class SitePropertyAdvisor implements ContentReviewSiteAdvisor {
-
+public class SitePropertyAdvisor implements ContentReviewSiteAdvisor
+{
 	private String siteProperty;
-	public void setSiteProperty(String p){
+	public void setSiteProperty(String p)
+	{
 		siteProperty = p;
 	}
-	
+
 	private String siteLTIProperty;
-	public void setSiteLTIProperty(String p){
+	public void setSiteLTIProperty(String p)
+	{
 		siteLTIProperty = p;
 	}
-	
+
 	private String siteDirectSubmissionProperty;
-	public void setSiteDirectSubmissionProperty(String p){
+	public void setSiteDirectSubmissionProperty(String p)
+	{
 		siteDirectSubmissionProperty = p;
 	}
-	
-	public boolean siteCanUseReviewService(Site site) {		
-		ResourceProperties properties = site.getProperties();		
+
+	public boolean siteCanUseReviewService(Site site)
+	{
+		ResourceProperties properties = site.getProperties();
 		String prop = properties.getProperty(siteProperty);
-		return Boolean.valueOf(prop).booleanValue();
+		return Boolean.valueOf(prop);
 	}
-	
-	public boolean siteCanUseLTIReviewService(Site site) {
-		ResourceProperties properties = site.getProperties();		
+
+	public boolean siteCanUseLTIReviewService(Site site)
+	{
+		ResourceProperties properties = site.getProperties();
 		String prop = properties.getProperty(siteLTIProperty);
-		return Boolean.valueOf(prop).booleanValue();
+		return Boolean.valueOf(prop);
 	}
-	
+
 	public boolean siteCanUseLTIReviewServiceForAssignment(Site site, Date assignmentCreationDate)
 	{
 		return siteCanUseLTIReviewService(site);
 	}
-	
-	public boolean siteCanUseLTIDirectSubmission(Site site){
-		ResourceProperties properties = site.getProperties();		
-		String prop = properties.getProperty(siteDirectSubmissionProperty);
-		return Boolean.valueOf(prop).booleanValue();
-	}
 
+	public boolean siteCanUseLTIDirectSubmission(Site site){
+		ResourceProperties properties = site.getProperties();
+		String prop = properties.getProperty(siteDirectSubmissionProperty);
+		return Boolean.valueOf(prop);
+	}
 }

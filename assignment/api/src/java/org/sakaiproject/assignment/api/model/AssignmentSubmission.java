@@ -132,6 +132,9 @@ public class AssignmentSubmission {
     @Column(name = "GROUP_ID")
     private String groupId;
 
+    @Column(name = "EXTERNAL_GRADE_DIFF")
+    private Boolean externalGradeDifferent = Boolean.FALSE;
+
     @ElementCollection
     @MapKeyColumn(name = "NAME")
     @Column(name = "VALUE")
