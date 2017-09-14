@@ -21,7 +21,6 @@
 package org.sakaiproject.contentreview.turnitin;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,7 +67,7 @@ public class TurnitinRosterSync {
 		this.turnitinReviewServiceImpl = turnitinReviewServiceImpl;
 	}
 	
-	// TIITODO: fix this
+	// TIITODO: fix this (BLOCKED BY DECISION TO SUPPORT LEGACY API)
 	/*private ContentReviewSiteAdvisor contentReviewSiteAdvisor;
 	public void setContentReviewSiteAdvisor(ContentReviewSiteAdvisor contentReviewSiteAdvisor) {
 		this.contentReviewSiteAdvisor = contentReviewSiteAdvisor;
@@ -452,7 +451,8 @@ public class TurnitinRosterSync {
 		return item.getClass().getCanonicalName() + item.getId();
 	}
 
-	// TIITODO: do we still need to support locking like this with the current Hibernate?
+	// TIITODO: (BLOCKED BY DECISION TO SUPPORT LEGACY API)
+	// do we still need to support locking like this with the current Hibernate?
 	/*private boolean obtainLock(ContentReviewRosterSyncItem item) {
 		Boolean lock = dao.obtainLock(makeLockID(item), serverConfigurationService.getServerId(), LOCK_PERIOD);
 		return (lock != null) ? lock : false;
@@ -471,7 +471,7 @@ public class TurnitinRosterSync {
 
 		log.info("Running Turnitin Roster Sync");
 		
-		// TIITODO: implement below with TiiContentReviewRosterSyncDao
+		// TIITODO: implement below with TiiContentReviewRosterSyncDao (BLOCKED BY DECISION TO SUPPORT LEGACY API)
 
 		/*Restriction notStarted = new Restriction("status", ContentReviewRosterSyncItem.NOT_STARTED_STATUS, Restriction.EQUALS);
 		Restriction failed = new Restriction("status", ContentReviewRosterSyncItem.FAILED_STATUS, Restriction.EQUALS);

@@ -30,32 +30,29 @@ public class ChainedPropertyAdvisor implements ContentReviewSiteAdvisor {
 
     public boolean siteCanUseLTIReviewService(Site site) {
         for(ContentReviewSiteAdvisor advisor: advisors) {
-            // TIITODO: fix this
-			/*if (advisor.siteCanUseLTIReviewService(site)) {
+            if (advisor.siteCanUseLTIReviewService(site)) {
                 return true;
-            }*/
-			return true;
+            }
+            return true;
         }
         return false;
     }
 
     public boolean siteCanUseLTIReviewServiceForAssignment(Site site, Date asnCreationDate) {
         for(ContentReviewSiteAdvisor advisor: advisors) {
-			// TIITODO: fix this
-            /*if (advisor.siteCanUseLTIReviewServiceForAssignment(site, asnCreationDate)) {
+            if (advisor.siteCanUseLTIReviewServiceForAssignment(site, asnCreationDate)) {
                 return true;
-            }*/
-			return true;
+            }
+            return true;
         }
         return false;
     }
 
     public boolean siteCanUseLTIDirectSubmission(Site site) {
         for(ContentReviewSiteAdvisor advisor: advisors) {
-			// TIITODO: fix this
-            /*if (advisor.siteCanUseLTIDirectSubmission(site)) {
+            if (advisor.siteCanUseLTIDirectSubmission(site)) {
                 return true;
-            }*/
+            }
         }
         return false;
     }
