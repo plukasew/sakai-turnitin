@@ -3,7 +3,8 @@ package org.sakaiproject.contentreview.turnitin.jobs;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 import org.quartz.StatefulJob;
-import org.sakaiproject.contentreview.impl.turnitin.TurnitinRosterSync;
+//import org.sakaiproject.contentreview.impl.turnitin.TurnitinRosterSync;
+import org.sakaiproject.contentreview.turnitin.TurnitinRosterSync;
 
 public class ContentReviewTurnitinRosterSync implements StatefulJob {
 	
