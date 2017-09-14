@@ -20,7 +20,6 @@ import org.sakaiproject.basiclti.util.SakaiBLTIUtil;
 import org.sakaiproject.component.cover.ComponentManager;
 import org.sakaiproject.component.cover.ServerConfigurationService;
 import org.sakaiproject.contentreview.service.ContentReviewService;
-import org.sakaiproject.contentreview.turnitin.TurnitinConstants;
 import org.sakaiproject.entity.api.Entity;
 import org.sakaiproject.lti.api.LTIService;
 import org.sakaiproject.turnitin.api.TurnitinLTIAPI;
@@ -118,7 +117,7 @@ public class TIICallbackServlet extends HttpServlet {
 			String asnId = sepIndex == -1 ? asnRef : asnRef.substring(sepIndex + 1);
 			String tiiAsnId = String.valueOf(json.getInt("assignmentid"));
 			ContentReviewService crs = (ContentReviewService) ComponentManager.get(ContentReviewService.class);
-			// TIITODO: fix below
+			// TIITODO: fix below (BLOCKED BY DATABASE REFACTOR)
 			//boolean success = crs.saveOrUpdateActivityConfigEntry(TurnitinConstants.TURNITIN_ASN_ID, tiiAsnId, asnId,
 			//		TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, TurnitinConstants.PROVIDER_ID, true);
 			boolean success = false;

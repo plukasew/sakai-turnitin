@@ -12,7 +12,7 @@ public class TiiContentReviewRosterSyncDao extends HibernateCommonDao<ContentRev
 {
 	public Optional<ContentReviewRosterSyncItem> findByStatusAndSite(int status, String siteId)
 	{
-		// TIITODO: implement this
+		// TIITODO: implement this (BLOCKED BY DECISION TO SUPPORT LEGACY API)
 		
 		return Optional.empty();
 	}

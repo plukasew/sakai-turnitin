@@ -29,7 +29,6 @@ public class TurnitinConstants
 	
 	public static final String KEY_FILE_TYPE_PREFIX = "file.type";
 	
-	// TIITODO: double check if these are still accurate
 	// Define Turnitin's acceptable file extensions and MIME types, order of these arrays DOES matter
 	public static final String[] DEFAULT_ACCEPTABLE_FILE_EXTENSIONS = new String[] {
 		".doc", 
