@@ -15,6 +15,7 @@
  */
 package org.sakaiproject.contentreview.advisors;
 
+import java.util.Date;
 import org.sakaiproject.site.api.Site;
 
 public interface ContentReviewSiteAdvisor {
@@ -32,8 +33,8 @@ public interface ContentReviewSiteAdvisor {
 	 * @param assignmentCreationDate
 	 * @return
 	 */
-//	@Deprecated
-//	public boolean siteCanUseLTIReviewServiceForAssignment(Site site, Date assignmentCreationDate);
+	@Deprecated
+	public boolean siteCanUseLTIReviewServiceForAssignment(Site site, Date assignmentCreationDate);
 
 	public boolean siteCanUseLTIDirectSubmission(Site site);
 }
