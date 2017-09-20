@@ -68,7 +68,8 @@ public class ContentReviewQueueServiceImpl implements ContentReviewQueueService 
 				throw new QueueException("Content " + contentId + " is already queued");
 			}
 			
-			ContentReviewItem item = new ContentReviewItem(contentId, userId, siteId, taskId, new Date(), ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE, providerId);
+			ContentReviewItem item = new ContentReviewItem(contentId, userId, siteId, taskId, new Date(),
+					ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE, providerId);
 			
 			log.debug("Adding content: " + contentId + " from site " + siteId + " and user: " + userId + " for task: " + taskId + " to submission queue");
 			
