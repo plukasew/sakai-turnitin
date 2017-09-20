@@ -1679,7 +1679,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		return togo;
 	}
 	
-	private Set<String> getActiveInstructorIds(String INST_ROLE, Site site)
+	protected Set<String> getActiveInstructorIds(String INST_ROLE, Site site)
 	{
 		log.debug("Getting active instructor IDs for permission " + INST_ROLE + " in site " + site.getId());
 
@@ -1800,7 +1800,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	 * @param user a sakai user
 	 * @return the first name or at least an initial if possible, "X" if no fn can be made
 	 */
-	private String getUserFirstName(User user) {
+	protected String getUserFirstName(User user) {
 		String ufn = user.getFirstName().trim();
 		if (ufn == null || ufn.equals("")) {
 			boolean genFN = (boolean) serverConfigurationService.getBoolean("turnitin.generate.first.name", true);
@@ -1823,7 +1823,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	 * @param user
 	 * @return
 	 */
-	private String getUserLastName(User user){
+	protected String getUserLastName(User user){
 		String uln = user.getLastName().trim();
 		if (uln == null || uln.equals("")) {
 			boolean genLN = serverConfigurationService.getBoolean("turnitin.generate.last.name", false);
