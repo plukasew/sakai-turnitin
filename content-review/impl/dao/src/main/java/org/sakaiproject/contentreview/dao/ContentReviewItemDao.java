@@ -23,7 +23,7 @@ import org.hibernate.Criteria;
 import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
 
-public class ContentReviewItemDao<T extends ContentReviewItem> extends HibernateCommonDao<ContentReviewItem> {
+public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> {
 	
 	protected static final String PROVIDER_ID_COL = "providerId";
 	protected static final String CONTENT_ID_COL = "contentId";
