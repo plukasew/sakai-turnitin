@@ -23,7 +23,17 @@ import org.hibernate.Criteria;
 import org.hibernate.criterion.Projections;
 import org.hibernate.criterion.Restrictions;
 
-public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> {
+public class ContentReviewItemDao<T extends ContentReviewItem> extends HibernateCommonDao<ContentReviewItem> {
+	
+	protected static final String PROVIDER_ID_COL = "providerId";
+	protected static final String CONTENT_ID_COL = "contentId";
+	protected static final String USER_ID_COL = "userId";
+	protected static final String SITE_ID_COL = "siteId";
+	protected static final String TASK_ID_COL = "taskId";
+	protected static final String EXTERNAL_ID_COL = "externalId";
+	protected static final String STATUS_COL = "status";
+	protected static final String ERROR_CODE_COL = "errorCode";
+	protected static final String NEXT_RETRY_TIME_COL = "nextRetryTime";
 	
 	@SuppressWarnings("unchecked")
 	public List<ContentReviewItem> findByProviderAnyMatching(Integer providerId, String contentId, String userId, String siteId, String taskId,
@@ -36,15 +46,15 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 		
 		Criteria c = sessionFactory.getCurrentSession()
 				.createCriteria(ContentReviewItem.class)
-				.add(Restrictions.eq("providerId", providerId));
+				.add(Restrictions.eq(PROVIDER_ID_COL, providerId));
 
-		if (contentId != null) c.add(Restrictions.eq("contentId", contentId));
-		if (userId != null) c.add(Restrictions.eq("userId", userId));
-		if (siteId != null) c.add(Restrictions.eq("siteId", siteId));
-		if (taskId != null) c.add(Restrictions.eq("taskId", taskId));
-		if (externalId != null) c.add(Restrictions.eq("externalId", externalId));
-		if (status != null) c.add(Restrictions.eq("status", status));
-		if (errorCode != null) c.add(Restrictions.eq("errorCode", errorCode));
+		if (contentId != null) c.add(Restrictions.eq(CONTENT_ID_COL, contentId));
+		if (userId != null) c.add(Restrictions.eq(USER_ID_COL, userId));
+		if (siteId != null) c.add(Restrictions.eq(SITE_ID_COL, siteId));
+		if (taskId != null) c.add(Restrictions.eq(TASK_ID_COL, taskId));
+		if (externalId != null) c.add(Restrictions.eq(EXTERNAL_ID_COL, externalId));
+		if (status != null) c.add(Restrictions.eq(STATUS_COL, status));
+		if (errorCode != null) c.add(Restrictions.eq(ERROR_CODE_COL, errorCode));
 
 		return c.list();
 	}
@@ -54,10 +64,10 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 
 		Criteria c = sessionFactory.getCurrentSession()
 				.createCriteria(ContentReviewItem.class)
-				.add(Restrictions.eq("providerId", providerId))
+				.add(Restrictions.eq(PROVIDER_ID_COL, providerId))
 				.setProjection( Projections.projectionList()
-						.add(Projections.groupProperty("siteId"))
-						.add(Projections.groupProperty("taskId")));
+						.add(Projections.groupProperty(SITE_ID_COL))
+						.add(Projections.groupProperty(TASK_ID_COL)));
 
 		return c.list();
 	}
@@ -67,8 +77,9 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 
 		Criteria c = sessionFactory.getCurrentSession()
 				.createCriteria(ContentReviewItem.class)
-				.add(Restrictions.eq("providerId", providerId))
-				.add(Restrictions.in("status", new Long[]{ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE, ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE}));
+				.add(Restrictions.eq(PROVIDER_ID_COL, providerId))
+				.add(Restrictions.in(STATUS_COL, new Long[]{ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE,
+					ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE}));
 		
 		return c.list();
 	}
@@ -77,8 +88,8 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 
 		Criteria c = sessionFactory.getCurrentSession()
 				.createCriteria(ContentReviewItem.class)
-				.add(Restrictions.eq("providerId", providerId))
-				.add(Restrictions.eq("contentId", contentId));
+				.add(Restrictions.eq(PROVIDER_ID_COL, providerId))
+				.add(Restrictions.eq(CONTENT_ID_COL, contentId));
 		
 		return Optional.ofNullable((ContentReviewItem) c.uniqueResult());
 	}
@@ -89,9 +100,11 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 		
 		Criteria c = sessionFactory.getCurrentSession()
 				.createCriteria(ContentReviewItem.class)
-				.add(Restrictions.eq("providerId", providerId))
-				.add(Restrictions.in("status", new Long[]{ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE}))
-				.add(Restrictions.lt("nextRetryTime", calendar.getTime()))
+				.add(Restrictions.eq(PROVIDER_ID_COL, providerId))
+				.add(Restrictions.in(STATUS_COL, new Long[]{ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE,
+					ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE,
+					ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_USER_DETAILS_CODE}))
+				.add(Restrictions.lt(NEXT_RETRY_TIME_COL, calendar.getTime()))
 				.setMaxResults(1);
 		
 		return Optional.ofNullable((ContentReviewItem) c.uniqueResult());

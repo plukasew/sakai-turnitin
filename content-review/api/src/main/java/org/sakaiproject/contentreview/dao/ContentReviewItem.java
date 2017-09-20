@@ -35,7 +35,6 @@ public class ContentReviewItem {
 	private String siteId;
 	private String taskId;
 	private String externalId;
-	private String submissionId;
 	private Date dateQueued;
 	private Date dateSubmitted;
 	private Date dateReportReceived;
@@ -49,10 +48,10 @@ public class ContentReviewItem {
 	private Integer version;
 
 	public ContentReviewItem(String contentId, Integer providerId) {
-		this(contentId, null, null, null, new Date(), ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE, providerId, null);
+		this(contentId, null, null, null, new Date(), ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE, providerId);
 	}
 
-	public ContentReviewItem(String contentId, String userId, String siteId, String taskId, Date dateQueued, Long status, Integer providerId, String submissionId) {
+	public ContentReviewItem(String contentId, String userId, String siteId, String taskId, Date dateQueued, Long status, Integer providerId) {
 		this.contentId = contentId;
 		this.userId = userId;
 		this.siteId = siteId;
@@ -61,6 +60,5 @@ public class ContentReviewItem {
 		this.status = status;
 		this.providerId = providerId;
 		this.nextRetryTime = new Date();
-		this.submissionId = submissionId;
 	}
 }
