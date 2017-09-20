@@ -12,9 +12,9 @@ import org.sakaiproject.contentreview.dao.ContentReviewItemDao;
  *
  * @author plukasew
  */
-public class ExtendedContentReviewItemDao<T extends ContentReviewItem> extends ContentReviewItemDao<ContentReviewItem>
+public class ExtendedContentReviewItemDao extends ContentReviewItemDao
 {
-	public Optional<T> findSingleItemToSubmitMissingExternalId(Integer providerId)
+	public Optional<ContentReviewItem> findSingleItemToSubmitMissingExternalId(Integer providerId)
 	{
 		Calendar calendar = Calendar.getInstance();
 		
@@ -27,6 +27,6 @@ public class ExtendedContentReviewItemDao<T extends ContentReviewItem> extends C
 				.add(Restrictions.lt(NEXT_RETRY_TIME_COL, calendar.getTime()))
 				.setMaxResults(1);
 		
-		return Optional.ofNullable((T) c.uniqueResult());
+		return Optional.ofNullable((ContentReviewItem) c.uniqueResult());
 	}
 }

@@ -186,7 +186,11 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 	public boolean updateExternalId(String contentId, String externalId)
 	{
 		dao.findByProviderAndContentId(getProviderId(), contentId)
-				.ifPresent(item -> { item.setExternalId(externalId); crqServ.update(item);});
+				.ifPresent(item ->
+				{ 
+					item.setExternalId(externalId);
+					crqServ.update(item);
+				});
 		// TIITODO: this is supposed to return success/failure depending on if the external id was updated or not
 		return true;
 	}
@@ -658,13 +662,14 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		return togo;
 	}
 
-	public String getLegacyReviewReportStudent(String contentId) throws QueueException, ReportException{
+	// TIITODO: can we remove these?
+	/*public String getLegacyReviewReportStudent(String contentId) throws QueueException, ReportException{
 		return getReviewReportStudent(contentId);
 	}
 	
 	public String getLegacyReviewReportInstructor(String contentId) throws QueueException, ReportException{
 		return getReviewReportStudent(contentId);
-	}
+	}*/
 	
 	// TIITODO: this method should probably just be removed at this point
 	/**

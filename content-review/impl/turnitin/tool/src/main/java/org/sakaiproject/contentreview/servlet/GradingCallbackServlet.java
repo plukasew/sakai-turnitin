@@ -197,9 +197,10 @@ public class GradingCallbackServlet extends HttpServlet {
 
 					M_log.debug("cri " + cri.getId() + " - " + cri.getContentId());
 
-					// TIITODO: implement below, currently grades will not be saved
-					boolean itemUpdated = contentReviewService.updateExternalGrade(cri.getContentId(), convertedScoreString);
-
+					// TIITODO: implement below once we figure out where updateExternalGrade should live, currently grades will not be saved
+					//boolean itemUpdated = contentReviewService.updateExternalGrade(cri.getContentId(), convertedScoreString);
+					boolean itemUpdated = true;
+					
 					if(!itemUpdated){
 						M_log.error("Could not update cr item external grade for content " + cri.getContentId());
 						return;
@@ -209,7 +210,9 @@ public class GradingCallbackServlet extends HttpServlet {
 						if(a.getTypeOfSubmission() != SubmissionType.SINGLE_ATTACHMENT_SUBMISSION && a.getTypeOfSubmission() != SubmissionType.TEXT_ONLY_ASSIGNMENT_SUBMISSION){
 							M_log.debug(a.getTypeOfSubmission() + " is the type setting for task " + cri.getTaskId());
 						} else {
-							AssignmentSubmission as = assignService.getSubmission(cri.getSubmissionId());
+							// TIITODO: enable this when we figure out external grades
+							// check the legacy Grademark support to see if they do it differently
+							/*AssignmentSubmission as = assignService.getSubmission(cri.getSubmissionId());
 							if(as != null){
 								String assignmentGrade = as.getGrade();
 								if(StringUtils.isEmpty(assignmentGrade)){
@@ -221,7 +224,7 @@ public class GradingCallbackServlet extends HttpServlet {
 									as.setExternalGradeDifferent(Boolean.TRUE);
 								}
 								assignService.updateSubmission(as);
-							}
+							}*/
 						}
 					}
 				}
@@ -229,7 +232,7 @@ public class GradingCallbackServlet extends HttpServlet {
 				M_log.error("Could not parse TII response (ParserConfigurationException): " + pce.getMessage());
 			} catch(SAXException se){
 				M_log.error("Could not parse TII response (SAXException): " + se.getMessage());
-			} catch(IOException | DOMException | IdUnusedException | PermissionException | NumberFormatException | InUseException e){
+			} catch(IOException | DOMException | IdUnusedException | PermissionException | NumberFormatException e){
 				M_log.error("Could not update the content review item " + sourcedId, e);
 			}
 			finally

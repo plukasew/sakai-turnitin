@@ -33,13 +33,7 @@
     <dependencies>
         <dependency>
             <groupId>org.sakaiproject.contentreview</groupId>
-            <artifactId>contentreview-model-api</artifactId>
-			<version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.sakaiproject.contentreview</groupId>
-            <artifactId>contentreview-service-api</artifactId>
-			<version>${project.version}</version>
+            <artifactId>content-review-api</artifactId>
         </dependency>
         <dependency>
             <groupId>org.sakaiproject.contentreview.turnitin</groupId>
