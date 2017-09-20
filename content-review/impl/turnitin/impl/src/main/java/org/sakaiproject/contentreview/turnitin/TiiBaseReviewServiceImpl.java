@@ -24,9 +24,17 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URLDecoder;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
@@ -35,38 +43,34 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.ArrayList;
+import java.util.stream.Collectors;
 import org.apache.commons.lang.StringUtils;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.hibernate.exception.ConstraintViolationException;
 import org.sakaiproject.content.api.ContentResource;
 import org.sakaiproject.contentreview.dao.ContentReviewItemDao;
 import org.sakaiproject.contentreview.exception.QueueException;
 import org.sakaiproject.contentreview.exception.ReportException;
 import org.sakaiproject.contentreview.exception.SubmissionException;
-//import org.sakaiproject.contentreview.model.ContentReviewActivityConfigEntry;
 import org.sakaiproject.contentreview.model.TiiActivityConfig;
 import org.sakaiproject.contentreview.dao.ContentReviewItem;
 import org.sakaiproject.contentreview.service.ContentReviewService;
 import org.sakaiproject.contentreview.service.ContentReviewQueueService;
-//import org.sakaiproject.contentreview.service.ContentReviewSiteAdvisor;
 import org.sakaiproject.contentreview.advisors.ContentReviewSiteAdvisor;
 import org.sakaiproject.contentreview.dao.ContentReviewConstants;
-import org.sakaiproject.contentreview.turnitin.TurnitinConstants;
-//import org.sakaiproject.genericdao.api.search.Order;
 import org.sakaiproject.genericdao.api.search.Restriction;
 import org.sakaiproject.genericdao.api.search.Search;
 import org.sakaiproject.site.api.Site;
 import org.sakaiproject.tool.api.ToolManager;
 import org.sakaiproject.user.api.UserDirectoryService;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinAPIUtil;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinReturnValue;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinLTIUtil;
@@ -74,23 +78,35 @@ import org.sakaiproject.assignment.api.AssignmentService;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.Setter;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.validator.EmailValidator;
 import org.sakaiproject.api.common.edu.person.SakaiPerson;
+import org.sakaiproject.api.common.edu.person.SakaiPersonManager;
+import org.sakaiproject.assignment.api.model.AssignmentSubmission;
+import org.sakaiproject.authz.api.SecurityAdvisor;
+import org.sakaiproject.authz.api.SecurityService;
 import org.sakaiproject.component.api.ServerConfigurationService;
 import org.sakaiproject.content.api.ContentHostingService;
 import org.sakaiproject.contentreview.exception.TransientSubmissionException;
-import static org.sakaiproject.contentreview.turnitin.TurnitinReviewServiceImpl.TURNITIN_DATETIME_FORMAT;
+import org.sakaiproject.contentreview.turnitin.dao.ExtendedContentReviewItemDao;
+import org.sakaiproject.db.api.SqlReader;
 import org.sakaiproject.entity.api.Entity;
+import org.sakaiproject.entity.api.EntityManager;
 import org.sakaiproject.entity.api.EntityProducer;
 import org.sakaiproject.entity.api.Reference;
 import org.sakaiproject.entity.api.ResourceProperties;
+import org.sakaiproject.entity.api.ResourcePropertiesEdit;
+import org.sakaiproject.entitybroker.EntityReference;
 import org.sakaiproject.exception.IdUnusedException;
 import org.sakaiproject.exception.PermissionException;
 import org.sakaiproject.exception.TypeException;
+import org.sakaiproject.lti.api.LTIService;
 import org.sakaiproject.site.api.SiteService;
+import org.sakaiproject.tool.api.SessionManager;
 import org.sakaiproject.user.api.User;
 import org.sakaiproject.user.api.UserNotDefinedException;
 import org.sakaiproject.util.ResourceLoader;
+import org.tsugi.basiclti.BasicLTIConstants;
 import org.w3c.dom.CharacterData;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -116,54 +132,57 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	//note that the assignment id actually has to be unique globally so use this as a prefix
 	// eg. assignid = defaultAssignId + siteId
 	private String defaultAssignId = null;
+	
+	private List<String> enabledSiteTypes;
 
-	private ContentReviewItemDao dao;
+	@Setter
+	protected ExtendedContentReviewItemDao dao;
 
-	public void setDao(ContentReviewItemDao dao) {
-		this.dao = dao;
-	}
-
+	@Setter
 	private ToolManager toolManager;
 
-	public void setToolManager(ToolManager toolManager) {
-		this.toolManager = toolManager;
-	}
-
-	private UserDirectoryService userDirectoryService;
-
-	public void setUserDirectoryService(
-			UserDirectoryService userDirectoryService) {
-		this.userDirectoryService = userDirectoryService;
-	}
+	@Setter
+	protected UserDirectoryService userDirectoryService;
 	
+	@Setter
 	protected ContentReviewSiteAdvisor siteAdvisor;
-	public void setSiteAdvisor(ContentReviewSiteAdvisor crsa) {
-		this.siteAdvisor = crsa;
-	}
 	
 	@Setter
 	protected ContentReviewQueueService crqServ;
 	
 	@Setter
-	private ServerConfigurationService serverConfigurationService;
+	protected ServerConfigurationService serverConfigurationService;
 	
 	@Setter
-	private TurnitinAccountConnection turnitinConn;
+	protected TurnitinAccountConnection turnitinConn;
 	
 	@Setter
-	private AssignmentService assignmentService;
+	protected AssignmentService assignmentService;
 	
 	@Setter
 	private ContentHostingService contentHostingService;
 	
 	@Setter
-	private SiteService siteService;
+	protected SiteService siteService;
 	
 	@Setter
-	private TurnitinLTIUtil tiiUtil;
+	protected TurnitinLTIUtil tiiUtil;
 	
 	@Setter	
 	private TurnitinContentValidator turnitinContentValidator;
+	
+	@Setter
+	private SakaiPersonManager sakaiPersonManager;
+	
+	@Setter
+	private EntityManager entityManager;
+
+	@Setter
+	protected SecurityService securityService;
+	
+	@Setter
+	protected SessionManager sessionManager;
+
 	
 	private boolean studentAccountNotified = true;
 	private int sendSubmissionNotification = 0;
@@ -195,6 +214,12 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	// TIITODO: wire this up as a Spring bean? Or is wiring up the subclass TurnitinReviewServiceImpl enough?
 	public void init()
 	{
+		enabledSiteTypes = Arrays.asList(ArrayUtils.nullToEmpty(serverConfigurationService.getStrings("turnitin.sitetypes")));
+		if (!enabledSiteTypes.isEmpty())
+		{
+			log.info("Turnitin is enabled for site types: " + StringUtils.join(enabledSiteTypes, ","));
+		}
+		
 		studentAccountNotified = turnitinConn.isStudentAccountNotified();
 		sendSubmissionNotification = turnitinConn.getSendSubmissionNotification();
 		maxRetry = turnitinConn.getMaxRetry();
@@ -216,6 +241,11 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		}
 		terminalQueueErrors = new HashSet<>(strTerminalQueueErrors.length);
 		Collections.addAll(terminalQueueErrors, strTerminalQueueErrors);
+		
+		if (!turnitinConn.isUseSourceParameter()) {
+			if (serverConfigurationService.getBoolean("turnitin.updateAssingments", false))
+				doAssignments();
+		}
 	}
 	
 	@Override
@@ -410,18 +440,70 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		}
 
 		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
-		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0) {
+		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
+		{
 			log.debug("Report not available: " + item.getStatus());
-			throw new ReportException("Report not available: " + item.getStatus());
 		}
 		
-		// TIITODO: in the 13.x implementation there is a bunch of grade syncing code here
+		// TIITODO: in the original 13.x implementation there is a bunch of grade syncing code here
 		// if GradeMark is enabled. This is probably not the right place to sync grades, so
-		// I've left it out. Grades should probably be sync'd at the point were the score
-		// is written, not where it is read
+		// I've commented it out. Grades should probably be sync'd at the point were the score
+		// is written, not where it is read. Find out where this is and implement the sync there.
 		
+		/*String[] assignData = null;
+		try {
+			assignData = getAssignData(contentId);
+		} catch (Exception e) {
+			log.error("(assignData)" + e);
+		}
+
+		String siteId = "", taskId = "", taskTitle = "";
+		Map<String, Object> data = new HashMap<String, Object>();
+		if (assignData != null) {
+			siteId = assignData[0];
+			taskId = assignData[1];
+			taskTitle = assignData[2];
+		} else {
+			siteId = item.getSiteId();
+			taskId = item.getTaskId();
+			taskTitle = getAssignmentTitle(taskId);
+			data.put("assignment1", "assignment1");
+		}
+		// Sync Grades
+		if (turnitinConn.getUseGradeMark()) {
+			try {
+				data.put("siteId", siteId);
+				data.put("taskId", taskId);
+				data.put("taskTitle", taskTitle);
+				syncGrades(data);
+			} catch (Exception e) {
+				log.error("Error syncing grades. " + e);
+			}
+		}*/
+		
+		// Note: with the grademark sync missing, this implementation is basically the same for both
+		// legacy and LTI integrations.
+		
+		// TIITODO: what to return here if getReviewScore is null?
 		return item.getReviewScore();
 	}
+	
+	// TIITODO: see comments about grade sync above and (re)move this method when possible
+	/**
+	 * Get additional data from String if available
+	 * 
+	 * @return array containing site ID, Task ID, Task Title
+	 */
+	/*private String[] getAssignData(String data) {
+		String[] assignData = null;
+		try {
+			if (data.contains("#")) {
+				assignData = data.split("#");
+			}
+		} catch (Exception e) {
+		}
+		return assignData;
+	}*/
 	
 	@Override
 	@Deprecated
@@ -432,8 +514,6 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		
 		log.debug("getReviewReport for LTI integration");
 		//should have already checked lti integration on assignments tool
-		Search search = new Search();
-		search.addRestriction(new Restriction("contentId", contentId));
 		List<ContentReviewItem> matchingItems = dao.findByProviderAnyMatching(getProviderId(), contentId, null, null, null, null, null, null);
 		if (matchingItems.isEmpty()) {
 			log.debug("Content " + contentId + " has not been queued previously");
@@ -657,10 +737,9 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		int errors = 0;
 		int success = 0;
 
-		final int providerId = getProviderId();
 		Optional<ContentReviewItem> nextItem;
 		
-		while ((nextItem = crqServ.getNextItemInQueueToSubmit(providerId)).isPresent())
+		while ((nextItem = getNextItemInSubmissionQueue()).isPresent())
 		{
 			ContentReviewItem currentItem = nextItem.get();
 			log.debug("Attempting to submit content: " + currentItem.getContentId() + " for user: " + currentItem.getUserId() + " and site: " + currentItem.getSiteId());
@@ -838,8 +917,12 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				if (a != null)
 				{
 					// TIITODO: re-evaluate the activity config table, consider a dedicated, properly-typed table just for Turnitin to store these values
-					tiiId = getActivityConfigValue(TurnitinConstants.TURNITIN_ASN_ID, a.getId(), TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID,
-						TurnitinConstants.PROVIDER_ID);
+					/*tiiId = getActivityConfigValue(TurnitinConstants.TURNITIN_ASN_ID, a.getId(), TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID,
+						TurnitinConstants.PROVIDER_ID);*/
+					
+					// TIITODO: strategy to determine which tool registration id to use?
+					Optional<TiiActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, a.getId());
+					tiiId = activityConfig.map(TiiActivityConfig::getTurnitinAsssignmentId).orElse("");
 				}
 
 				if(tiiId.isEmpty()){
@@ -1352,29 +1435,33 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	public boolean isSiteAcceptable(Site s)
 	{
 		// TIITODO: dedicated class for this stuff? it is already partially delegated to siteAdvisor
-		
-		if (s == null) {
+
+		if (s == null)
+		{
 			return false;
 		}
 
 		log.debug("isSiteAcceptable: " + s.getId() + " / " + s.getTitle());
 
 		// Delegated to another bean
-		if (siteAdvisor != null) {
+		if (siteAdvisor != null)
+		{
 			return siteAdvisor.siteCanUseReviewService(s);
 		}
 
 		// Check site property
 		ResourceProperties properties = s.getProperties();
 
-                String prop = (String) properties.get(TURNITIN_SITE_PROPERTY);
-                if (prop != null) {
+		String prop = (String) properties.get(TurnitinConstants.TURNITIN_SITE_PROPERTY);
+		if (prop != null)
+		{
 			log.debug("Using site property: " + prop);
-                        return Boolean.parseBoolean(prop);
-                }
+			return Boolean.parseBoolean(prop);
+		}
 
 		// Check list of allowed site types, if defined
-		if (enabledSiteTypes != null && !enabledSiteTypes.isEmpty()) {
+		if (!enabledSiteTypes.isEmpty())
+		{
 			log.debug("Using site type: " + s.getType());
 			return enabledSiteTypes.contains(s.getType());
 		}
@@ -1382,6 +1469,23 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		// No property set, no restriction on site types, so allow
         return true; 
     }
+	
+	@Override
+	public String getIconCssClassforScore(int score, String contentId)
+	{
+		// TIITODO: constants?
+		if (score == 0) {
+			return "contentReviewIconThreshold-5";
+		} else if (score < 25) {
+			return "contentReviewIconThreshold-4";
+		} else if (score < 50) {
+			return "contentReviewIconThreshold-3";
+		} else if (score < 75) {
+			return "contentReviewIconThreshold-2";
+		}
+		
+		return "contentReviewIconThreshold-1";
+	}
 	
 	
 	@Override
@@ -1391,49 +1495,60 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	}
 	
 	@Override
-	public void removeFromQueue(String ContentId) {
-		List<ContentReviewItem> object = getItemsByContentId(ContentId);
-		dao.delete(object);
-		
-		
-	}
-
-	public boolean updateItemAccess(String contentId){
-		return dao.updateIsUrlAccessed( contentId, true );
-	}
-
-	public boolean updateExternalId(String contentId, String externalId)
+	public void removeFromQueue(String contentId)
 	{
-		return dao.updateExternalId(contentId, externalId);
-	}
-		
-	public boolean updateExternalGrade(String contentId, String score){
-		ContentReviewItem cri = getFirstItemByContentId(contentId);
-		if(cri != null){
-			cri.setExternalGrade(score);
-			dao.update(cri);
-			return true;
-		}
-		return false;
+		crqServ.removeFromQueue(getProviderId(), contentId);
 	}
 	
-	public String getExternalGradeForContentId(String contentId){
-		ContentReviewItem cri = getFirstItemByContentId(contentId);
-		if(cri != null){
-			return cri.getExternalGrade();
-		}
-		return null;
+	@Override
+	public String getLocalizedStatusMessage(String messageCode, String userRef)
+	{
+		String userId = EntityReference.getIdFromRef(userRef);
+		ResourceLoader resourceLoader = new ResourceLoader(userId, "turnitin");
+		return resourceLoader.getString(messageCode);
 	}
-
-	public String getIconUrlforScore(Long score) {
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-
 	
-	public boolean isAcceptableSize(ContentResource resource) {
-		throw new UnsupportedOperationException("Not implemented");
+	@Override
+	public String getLocalizedStatusMessage(String messageCode)
+	{
+		return getLocalizedStatusMessage(messageCode, userDirectoryService.getCurrentUser().getReference());
+	}
+	
+	@Override
+	public String getReviewError(String contentId)
+	{
+    	return getLocalizedReviewErrorMessage(contentId);
+    }
+
+	@Override
+	public String getLocalizedStatusMessage(String messageCode, Locale locale)
+	{
+		//TODO not sure how to do this with  the sakai resource loader
+		return null;
+	}
+	
+	/**
+	 * Works by fetching the Instructor User info based on defaults or current
+	 * user.
+	 *
+	 * @param siteId
+	 * @param taskId
+	 * @return
+	 * @throws SubmissionException
+	 * @throws TransientSubmissionException
+	 */
+	@SuppressWarnings("unchecked")
+	@Override
+	public Map getAssignment(String siteId, String taskId) throws SubmissionException, TransientSubmissionException {
+		String taskTitle = getAssignmentTitle(taskId);
+
+		Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+			"assign", taskTitle, "assignid", taskId, "cid", siteId, "ctl", siteId,
+			"fcmd", "7", "fid", "4", "utp", "2" );
+
+		params.putAll(getInstructorInfo(siteId));
+
+		return turnitinConn.callTurnitinReturnMap(params);
 	}
 	
 	/**
@@ -1451,63 +1566,14 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	 */
 	@SuppressWarnings("unchecked")
 	@Override
-	public void createAssignment(String siteId, String asnId, Map extraAsnOpts) throws SubmissionException, TransientSubmissionException {
+	public void createAssignment(String siteId, String asnId, Map extraAsnOpts) throws SubmissionException, TransientSubmissionException
+	{
 		syncAssignment(siteId, asnId, extraAsnOpts, null);
 	}
 
-	@Override
-	public String getActivityConfigValue(String name, String activityId, String toolId, int providerId)
-	{
-		return getActivityConfigEntry(name, activityId, toolId, providerId)
-				.map(e -> StringUtils.trimToEmpty(e.getValue())).orElse("");
-
-	}
 	
-	private Optional<ContentReviewActivityConfigEntry> getActivityConfigEntry(String name, String activityId, String toolId, int providerId)
-	{
-		Search search = new Search();
-		search.addRestriction(new Restriction("name", name));
-		search.addRestriction(new Restriction("activityId", activityId));
-		search.addRestriction(new Restriction("toolId", toolId));
-		search.addRestriction(new Restriction("providerId", providerId));
-		return Optional.ofNullable(dao.findOneBySearch(ContentReviewActivityConfigEntry.class, search));
-	}
-
-	@Override
-	public boolean saveOrUpdateActivityConfigEntry(String name, String value, String activityId, String toolId, int providerId, boolean overrideIfSet)
-	{
-		if (StringUtils.isBlank(name) || StringUtils.isBlank(value) || StringUtils.isBlank(activityId) || StringUtils.isBlank(toolId))
-		{
-			return false;
-		}
-		
-		Optional<ContentReviewActivityConfigEntry> optEntry = getActivityConfigEntry(name, activityId, toolId, providerId);
-		if (!optEntry.isPresent())
-		{
-			try
-			{
-				dao.create(new ContentReviewActivityConfigEntry(name, value, activityId, toolId, providerId));
-				return true;
-			}
-			catch (DataIntegrityViolationException | ConstraintViolationException e)
-			{
-				// there is a uniqueness constraint on entry keys in the database
-				// a row with the same key was written after we checked, retrieve new data and continue
-				optEntry = getActivityConfigEntry(name, activityId, toolId, providerId);
-			}
-		}
-
-		if (overrideIfSet)
-		{
-			ContentReviewActivityConfigEntry entry = optEntry.orElseThrow( () -> new RuntimeException("Unique constraint violated during insert attempt, yet unable to retrieve row."));
-			entry.setValue(value);
-			dao.update(entry);
-			return true;
-		}
-
-		return false;
-	}
-	
+	/* ------------------------------- END CONTENT REVIEW SERVICE API METHODS ------------------------------- */
+	/*                                                                                                        */
 	/* ------------------------------ PRIVATE / PROTECTED only below this line ------------------------------ */
 	// TIITODO: separate the legacy and LTI methods, move legacy methods to delegate class for easy removal later?
 	
@@ -1518,36 +1584,36 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		String contentId = item.getContentId();
 		String assignmentId = item.getTaskId();
 		String siteId = item.getSiteId();
-		try
+		
+		// TIITODO: will we need to write a conversion script of sakai_site_property -> TiiActivityConfig?
+		// TIITODO: strategy to determine which tool registration id to use?
+		Optional<TiiActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentId);
+		if (activityConfig.isPresent())
 		{
-			String ltiReportsId = siteService.getSite(siteId).getProperties().getProperty("turnitin_reports_lti_id");
+			String ltiReportsId = activityConfig.get().getStealthedLtiId();
 			String ltiResourceId = item.getExternalId();
 			if (ltiResourceId == null)
 			{
 				// Fallback: link to assignment
-				return getLTIAccess(assignmentId, siteId);
+				return getLTIAccess(activityConfig.get(), siteId);
 			}
+			// TIITODO: String.format + constant
 			ltiReportsUrl = "/access/basiclti/site/" + siteId + "/content:" + ltiReportsId + ",resource:" + ltiResourceId;
-			log.debug("getLTIRepotAccess: " + ltiReportsUrl);
+			log.debug("getLTIReportAccess: " + ltiReportsUrl);
 		}
-		catch (Exception e)
-		{
-			log.warn("Exception while trying to get LTI Reports access for assignment "  + assignmentId + ", resource " + contentId + ", and site " + siteId + ": " + e.getMessage());
-		}
+		
 		return ltiReportsUrl;
 	}
 	
-	protected String getLTIAccess(String taskId, String contextId){
-		String ltiUrl = null;
-		try{
-			String ltiId = getActivityConfigValue(TurnitinConstants.STEALTHED_LTI_ID, asnRefToId(taskId), TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID,
-					TurnitinConstants.PROVIDER_ID);
-			ltiUrl = "/access/basiclti/site/" + contextId + "/content:" + ltiId;
-			log.debug("getLTIAccess: " + ltiUrl);
-		} catch(Exception e) {
-			log.error( "Unexpected exception getting LTI access", e );
+	private String getLTIAccess(TiiActivityConfig activityConfig, String contextId)
+	{
+		String ltiId = activityConfig.getStealthedLtiId();
+		if (ltiId == null)
+		{
+			return null;
 		}
-		return ltiUrl;
+		// TIITODO: String.format + constant
+		return "/access/basiclti/site/" + contextId + "/content:" + ltiId;
 	}
 	
 		/**
@@ -1561,7 +1627,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	 * @return
 	 */
 	@SuppressWarnings("unchecked")
-	private Map getInstructorInfo(String siteId)
+	protected Map getInstructorInfo(String siteId)
 	{
 		log.debug("Getting instructor info for site " + siteId);
 
@@ -1613,10 +1679,33 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		return togo;
 	}
 	
+	private Set<String> getActiveInstructorIds(String INST_ROLE, Site site)
+	{
+		log.debug("Getting active instructor IDs for permission " + INST_ROLE + " in site " + site.getId());
+
+		Set<String> instIds = site.getUsersIsAllowed(INST_ROLE);
+
+		//the site could contain references to deleted users
+		List<User> activeUsers = userDirectoryService.getUsers(instIds);
+		Set<String> ret =  new HashSet<>();
+		for (int i = 0; i < activeUsers.size(); i++) {
+			User user = activeUsers.get(i);
+			// Ignore users who do not have a first and/or last name set or do not have
+			// a valid email address, as this will cause a TII API call to fail
+			if (user.getFirstName() != null && !user.getFirstName().trim().isEmpty() && 
+		   	    user.getLastName() != null && !user.getLastName().trim().isEmpty() &&
+			    getEmail(user) != null) {
+				ret.add(user.getId());
+			}
+		}
+
+		return ret;
+	}
+	
 	// TIITODO: move these email/firstname/lastname methods into a delegate class
 	
 	// returns null if no valid email exists
-	private String getEmail(User user)
+	protected String getEmail(User user)
 	{
 		String uem = null;
 
@@ -1871,7 +1960,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			log.warn("Unable to decode fileName: " + fileName, eae);
 			return contentId;
 		} catch (UnsupportedEncodingException e) {
-			log.debug( e );
+			log.debug(e.getMessage(), e);
 		}
 
 		fileName = fileName.replace(' ', '_');
@@ -1914,11 +2003,11 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		{
 			return Optional.empty();
 		}
-		Date date = new Date(asn.getTimeCreated().getTime());
+		Date date = new Date(asn.getDateCreated().getTime());
 		return Optional.of(date);
 	}
 	
-	private String getTEM(String cid) {
+	protected String getTEM(String cid) {
         if (turnitinConn.isUseSourceParameter()) {
             return getInstructorInfo(cid).get("uem").toString();
         } else {
@@ -1950,7 +2039,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	 * @param taskId
 	 * @return
 	 */
-	private String getAssignmentTitle(String taskId){
+	protected String getAssignmentTitle(String taskId){
 		String togo = taskId;
 		if (taskId.startsWith("/assignment/")) {
 			try {
@@ -1967,7 +2056,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				togo=togo.replaceAll("\\W+","");
 
 			} catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException | UnsupportedEncodingException e) {
-				log.debug( e );
+				log.debug(e.getMessage(), e);
 			} catch (Exception e) {
 				log.error( "Unexpected exception getting assignment title", e );
 			}
@@ -1993,7 +2082,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
             }
         }
         catch (Exception e) {
-            log.debug( e );
+            log.debug(e.getMessage(), e);
         }
 
         return title;
@@ -2006,23 +2095,15 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	private void checkForReportsBulk() {
 
 		SimpleDateFormat dform = ((SimpleDateFormat) DateFormat.getDateInstance());
-		dform.applyPattern(TURNITIN_DATETIME_FORMAT);
+		dform.applyPattern(TurnitinConstants.TURNITIN_DATETIME_FORMAT);
 
 		log.info("Fetching reports from Turnitin");
-
+		
 		// get the list of all items that are waiting for reports
 		// but skip items with externalId = null, this happens when the LTI integration's callback fails. In this case, they'll be resubmitted by the queue job.
 		// For the Sakai API integration, we should never enter the report state with externalId = null
-		List<ContentReviewItem> awaitingReport = dao.findByProperties(ContentReviewItem.class,
-				new String[] { "status", "externalId" },
-				new Object[] { ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE, "" },
-				new int[] { dao.EQUALS, dao.NOT_NULL });
-
-		awaitingReport.addAll(dao.findByProperties(ContentReviewItem.class,
-				new String[] { "status", "externalId" },
-				new Object[] { ContentReviewItem.REPORT_ERROR_RETRY_CODE, "" },
-				new int[] { dao.EQUALS, dao.NOT_NULL }));
-
+		List<ContentReviewItem> awaitingReport = crqServ.getAwaitingReports(getProviderId()).stream()
+				.filter(item -> item.getExternalId() != null).collect(Collectors.toList());
 		Iterator<ContentReviewItem> listIterator = awaitingReport.iterator();
 		HashMap<String, Integer> reportTable = new HashMap<>();
 
@@ -2032,300 +2113,295 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		while (listIterator.hasNext()) {
 			currentItem = (ContentReviewItem) listIterator.next();
 
+			// has the item reached its next retry time?
+			if (currentItem.getNextRetryTime() == null)
+			{
+				currentItem.setNextRetryTime(new Date());
+			}
+			else if (currentItem.getNextRetryTime().after(new Date()))
+			{
+				//we haven't reached the next retry time
+				log.info("next retry time not yet reached for item: " + currentItem.getId());
+				crqServ.update(currentItem);
+				continue;
+			}
+
+			if (currentItem.getRetryCount() == null ) {
+				currentItem.setRetryCount(Long.valueOf(0));
+				currentItem.setNextRetryTime(this.getNextRetryTime(0));
+			} else if (currentItem.getRetryCount().intValue() > maxRetry) {
+				processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_EXCEEDED_CODE, null, null );
+				continue;
+			} else {
+				log.debug("Still have retries left, continuing. ItemID: " + currentItem.getId());
+			}
+
+			Site s;
 			try
 			{
-				// has the item reached its next retry time?
-				if (currentItem.getNextRetryTime() == null)
-					currentItem.setNextRetryTime(new Date());
+				s = siteService.getSite(currentItem.getSiteId());
+			}
+			catch (IdUnusedException iue)
+			{
+				log.warn("checkForReportsBulk: Site " + currentItem.getSiteId() + " not found!" + iue.getMessage());
+				// long l = currentItem.getRetryCount().longValue();
+				// l++;
+				// currentItem.setRetryCount(Long.valueOf(l));
+				// currentItem.setNextRetryTime(this.getNextRetryTime(Long.valueOf(l)));
+				// missing site is unrecoverable(?), skip to final retry immediately
+				// TIITODO: confirm for softly deleted sites, switch back to commented out logic above if required
+				currentItem.setRetryCount(maxRetry);
+				currentItem.setNextRetryTime(getNextRetryTime(maxRetry));
+				currentItem.setLastError("Site not found");
+				crqServ.update(currentItem);
+				continue;
+			}
+			//////////////////////////////  NEW LTI INTEGRATION  ///////////////////////////////
+			Optional<Date> dateOpt = getAssignmentCreationDate(currentItem.getTaskId());
+			if(dateOpt.isPresent() && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, dateOpt.get())){			
+				log.debug("getReviewScore using the LTI integration");			
 
-				else if (currentItem.getNextRetryTime().after(new Date())) {
-					//we haven't reached the next retry time
-					log.info("next retry time not yet reached for item: " + currentItem.getId());
-					dao.update(currentItem);
-					continue;
-				}
+				Map<String,String> ltiProps = new HashMap<> ();
+				ltiProps = putInstructorInfo(ltiProps, currentItem.getSiteId());
 
-				if (currentItem.getRetryCount() == null ) {
-					currentItem.setRetryCount(Long.valueOf(0));
-					currentItem.setNextRetryTime(this.getNextRetryTime(0));
-				} else if (currentItem.getRetryCount().intValue() > maxRetry) {
-					processError( currentItem, ContentReviewItem.SUBMISSION_ERROR_RETRY_EXCEEDED, null, null );
-					continue;
-				} else {
-					log.debug("Still have retries left, continuing. ItemID: " + currentItem.getId());
-					// Moving down to check for report generate speed.
-					//long l = currentItem.getRetryCount().longValue();
-					//l++;
-					//currentItem.setRetryCount(Long.valueOf(l));
-					//currentItem.setNextRetryTime(this.getNextRetryTime(Long.valueOf(l)));
-					//dao.update(currentItem);
-				}
-				
-				Site s;
-				try {
-					s = siteService.getSite(currentItem.getSiteId());
-				}
-				catch (IdUnusedException iue) {
-					log.warn("checkForReportsBulk: Site " + currentItem.getSiteId() + " not found!" + iue.getMessage());
+				String paperId = currentItem.getExternalId();
+
+				if(paperId == null){
+					log.warn("Could not find TII paper id for the content " + currentItem.getContentId());
 					long l = currentItem.getRetryCount();
 					l++;
 					currentItem.setRetryCount(l);
 					currentItem.setNextRetryTime(this.getNextRetryTime(l));
-					currentItem.setLastError("Site not found");
-					dao.update(currentItem);
+					currentItem.setLastError("Could not find TII paper id for the submission");
+					crqServ.update(currentItem);
 					continue;
 				}
-				//////////////////////////////  NEW LTI INTEGRATION  ///////////////////////////////
-				Optional<Date> dateOpt = getAssignmentCreationDate(currentItem.getTaskId());
-				if(dateOpt.isPresent() && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, dateOpt.get())){			
-					log.debug("getReviewScore using the LTI integration");			
-					
-					Map<String,String> ltiProps = new HashMap<> ();
-					ltiProps = putInstructorInfo(ltiProps, currentItem.getSiteId());
-					
-					String paperId = currentItem.getExternalId();
-					
-					if(paperId == null){
-						log.warn("Could not find TII paper id for the content " + currentItem.getContentId());
+
+				TurnitinReturnValue result = tiiUtil.makeLTIcall(TurnitinLTIUtil.INFO_SUBMISSION, paperId, ltiProps);
+				if(result.getResult() >= 0){
+					currentItem.setReviewScore(result.getResult());
+					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE);
+					currentItem.setDateReportReceived(new Date());
+					currentItem.setLastError(null);
+					currentItem.setErrorCode(null);
+					crqServ.update(currentItem);
+
+					try
+					{
+						ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
+						boolean itemUpdated = updateItemAccess( resource.getId() );
+						if( !itemUpdated )
+						{
+							log.error( "Could not update cr item access status" );
+						}
+					}
+					catch( PermissionException | IdUnusedException | TypeException ex )
+					{
+						log.error( "Could not update cr item access status", ex );
+					}
+
+					//log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
+					log.debug("new report received: " + paperId + " -> " + currentItem.getReviewScore());
+				} else {
+					if(result.getResult() == -7){
+						log.debug("report is still pending for paper " + paperId);
+						currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
+						currentItem.setLastError( result.getErrorMessage() );
+						currentItem.setErrorCode( result.getResult() );
+					} else {
+						log.error("Error making LTI call");
 						long l = currentItem.getRetryCount();
 						l++;
 						currentItem.setRetryCount(l);
 						currentItem.setNextRetryTime(this.getNextRetryTime(l));
-						currentItem.setLastError("Could not find TII paper id for the submission");
-						dao.update(currentItem);
-						continue;
+						currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE);
+						currentItem.setLastError("Report Data Error: " + result.getResult());
 					}
-					
-					TurnitinReturnValue result = tiiUtil.makeLTIcall(TurnitinLTIUtil.INFO_SUBMISSION, paperId, ltiProps);
-					if(result.getResult() >= 0){
-						currentItem.setReviewScore(result.getResult());
-						currentItem.setStatus(ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE);
-						currentItem.setDateReportReceived(new Date());
-						currentItem.setLastError(null);
-						currentItem.setErrorCode(null);
-						dao.update(currentItem);
+					crqServ.update(currentItem);
+				}
 
-						try
-						{
-							ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
-							boolean itemUpdated = updateItemAccess( resource.getId() );
-							if( !itemUpdated )
-							{
-								log.error( "Could not update cr item access status" );
+				continue;
+			}
+			//////////////////////////////  OLD API INTEGRATION  ///////////////////////////////
+
+			if (currentItem.getExternalId() == null || currentItem.getExternalId().equals("")) {
+				currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE);
+				crqServ.update(currentItem);
+				continue;
+			}
+
+			if (!reportTable.containsKey(currentItem.getExternalId())) {
+				// get the list from turnitin and see if the review is available
+
+				log.debug("Attempting to update hashtable with reports for site " + currentItem.getSiteId());
+
+				String fcmd = "2";
+				String fid = "10";
+
+				try {
+					User user = userDirectoryService.getUser(currentItem.getUserId());
+				} catch (Exception e) {
+					log.error("Unable to look up user: " + currentItem.getUserId() + " for contentItem: " + currentItem.getId(), e);
+				}
+
+				String cid = currentItem.getSiteId();
+				String tem = getTEM(cid);
+
+				String utp = "2";
+
+				String assignid = currentItem.getTaskId();
+
+				String assign = currentItem.getTaskId();
+				String ctl = currentItem.getSiteId();
+
+				// TODO FIXME Current sgithens
+				// Move the update setRetryAttempts to here, and first call and
+				// check the assignment from TII to see if the generate until
+				// due is enabled. In that case we don't want to waste retry
+				// attempts and should just continue.
+				try {
+					// TODO FIXME This is broken at the moment because we need
+					// to have a userid, but this is assuming it's coming from
+					// the thread, but we're in a quartz job.
+					//Map curasnn = getAssignment(currentItem.getSiteId(), currentItem.getTaskId());
+					// TODO FIXME Parameterize getAssignment method to take user information
+					Map getAsnnParams = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+							"assign", getAssignmentTitle(currentItem.getTaskId()), "assignid", currentItem.getTaskId(), "cid", currentItem.getSiteId(), "ctl", currentItem.getSiteId(),
+							"fcmd", "7", "fid", "4", "utp", "2" );
+
+					getAsnnParams.putAll(getInstructorInfo(currentItem.getSiteId()));
+
+					Map curasnn = turnitinConn.callTurnitinReturnMap(getAsnnParams);
+
+					if (curasnn.containsKey("object")) {
+						Map curasnnobj = (Map) curasnn.get("object");
+						String reportGenSpeed = (String) curasnnobj.get("generate");
+						String duedate = (String) curasnnobj.get("dtdue");
+						SimpleDateFormat retform = ((SimpleDateFormat) DateFormat.getDateInstance());
+						retform.applyPattern(TurnitinConstants.TURNITIN_DATETIME_FORMAT);
+						Date duedateObj = null;
+						try {
+							if (duedate != null) {
+								duedateObj = retform.parse(duedate);
 							}
+						} catch (ParseException pe) {
+							log.warn("Unable to parse turnitin dtdue: " + duedate, pe);
 						}
-						catch( PermissionException | IdUnusedException | TypeException ex )
-						{
-							log.error( "Could not update cr item access status", ex );
+						if (reportGenSpeed != null && duedateObj != null &&
+							reportGenSpeed.equals("2") && duedateObj.after(new Date())) {
+							log.info("Report generate speed is 2, skipping for now. ItemID: " + currentItem.getId());
+							// If there was previously a transient error for this item, reset the status
+							if (ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE.equals(currentItem.getStatus())) {
+								currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
+								currentItem.setLastError(null);
+								currentItem.setErrorCode(null);
+								crqServ.update(currentItem);
+							}
+							continue;
 						}
-
-						//log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
-						log.debug("new report received: " + paperId + " -> " + currentItem.getReviewScore());
-					} else {
-						if(result.getResult() == -7){
-							log.debug("report is still pending for paper " + paperId);
-							currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
-							currentItem.setLastError( result.getErrorMessage() );
-							currentItem.setErrorCode( result.getResult() );
-						} else {
-							log.error("Error making LTI call");
+						else {
+							log.debug("Incrementing retry count for currentItem: " + currentItem.getId());
 							long l = currentItem.getRetryCount();
 							l++;
 							currentItem.setRetryCount(l);
 							currentItem.setNextRetryTime(this.getNextRetryTime(l));
-							currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
-							currentItem.setLastError("Report Data Error: " + result.getResult());
+							crqServ.update(currentItem);
 						}
-						dao.update(currentItem);
 					}
-					
-					continue;
-				}
-				//////////////////////////////  OLD API INTEGRATION  ///////////////////////////////
-
-				if (currentItem.getExternalId() == null || currentItem.getExternalId().equals("")) {
-					currentItem.setStatus(Long.valueOf(4));
-					dao.update(currentItem);
-					continue;
+				} catch (SubmissionException | TransientSubmissionException e) {
+					log.error("Unable to check the report gen speed of the asnn for item: " + currentItem.getId(), e);
 				}
 
-				if (!reportTable.containsKey(currentItem.getExternalId())) {
-					// get the list from turnitin and see if the review is available
+				Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+							"fid", fid,
+							"fcmd", fcmd,
+							"tem", tem,
+							"assign", assign,
+							"assignid", assignid,
+							"cid", cid,
+							"ctl", ctl,
+							"utp", utp
+					);
+				params.putAll(getInstructorInfo(currentItem.getSiteId()));
 
-					log.debug("Attempting to update hashtable with reports for site " + currentItem.getSiteId());
+				Document document;
 
-					String fcmd = "2";
-					String fid = "10";
-
-					try {
-						User user = userDirectoryService.getUser(currentItem.getUserId());
-					} catch (Exception e) {
-						log.error("Unable to look up user: " + currentItem.getUserId() + " for contentItem: " + currentItem.getId(), e);
-					}
-
-					String cid = currentItem.getSiteId();
-					String tem = getTEM(cid);
-
-					String utp = "2";
-
-					String assignid = currentItem.getTaskId();
-
-					String assign = currentItem.getTaskId();
-					String ctl = currentItem.getSiteId();
-
-					// TODO FIXME Current sgithens
-					// Move the update setRetryAttempts to here, and first call and
-					// check the assignment from TII to see if the generate until
-					// due is enabled. In that case we don't want to waste retry
-					// attempts and should just continue.
-					try {
-						// TODO FIXME This is broken at the moment because we need
-						// to have a userid, but this is assuming it's coming from
-						// the thread, but we're in a quartz job.
-						//Map curasnn = getAssignment(currentItem.getSiteId(), currentItem.getTaskId());
-						// TODO FIXME Parameterize getAssignment method to take user information
-						Map getAsnnParams = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
-								"assign", getAssignmentTitle(currentItem.getTaskId()), "assignid", currentItem.getTaskId(), "cid", currentItem.getSiteId(), "ctl", currentItem.getSiteId(),
-								"fcmd", "7", "fid", "4", "utp", "2" );
-
-						getAsnnParams.putAll(getInstructorInfo(currentItem.getSiteId()));
-
-						Map curasnn = turnitinConn.callTurnitinReturnMap(getAsnnParams);
-
-						if (curasnn.containsKey("object")) {
-							Map curasnnobj = (Map) curasnn.get("object");
-							String reportGenSpeed = (String) curasnnobj.get("generate");
-							String duedate = (String) curasnnobj.get("dtdue");
-							SimpleDateFormat retform = ((SimpleDateFormat) DateFormat.getDateInstance());
-							retform.applyPattern(TURNITIN_DATETIME_FORMAT);
-							Date duedateObj = null;
-							try {
-								if (duedate != null) {
-									duedateObj = retform.parse(duedate);
-								}
-							} catch (ParseException pe) {
-								log.warn("Unable to parse turnitin dtdue: " + duedate, pe);
-							}
-							if (reportGenSpeed != null && duedateObj != null &&
-								reportGenSpeed.equals("2") && duedateObj.after(new Date())) {
-								log.info("Report generate speed is 2, skipping for now. ItemID: " + currentItem.getId());
-								// If there was previously a transient error for this item, reset the status
-								if (ContentReviewItem.REPORT_ERROR_RETRY_CODE.equals(currentItem.getStatus())) {
-									currentItem.setStatus(ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE);
-									currentItem.setLastError(null);
-									currentItem.setErrorCode(null);
-									dao.update(currentItem);
-								}
-								continue;
-							}
-							else {
-								log.debug("Incrementing retry count for currentItem: " + currentItem.getId());
-								long l = currentItem.getRetryCount();
-								l++;
-								currentItem.setRetryCount(l);
-								currentItem.setNextRetryTime(this.getNextRetryTime(l));
-								dao.update(currentItem);
-							}
-						}
-					} catch (SubmissionException | TransientSubmissionException e) {
-						log.error("Unable to check the report gen speed of the asnn for item: " + currentItem.getId(), e);
-					}
-
-					Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
-								"fid", fid,
-								"fcmd", fcmd,
-								"tem", tem,
-								"assign", assign,
-								"assignid", assignid,
-								"cid", cid,
-								"ctl", ctl,
-								"utp", utp
-						);
-						params.putAll(getInstructorInfo(currentItem.getSiteId()));
-
-					Document document;
-
-					try {
-						document = turnitinConn.callTurnitinReturnDocument(params);
-					}
-					catch (TransientSubmissionException e) {
-						log.warn("Update failed due to TransientSubmissionException error: " + e.toString(), e);
-						currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
-						currentItem.setLastError(e.getMessage());
-						dao.update(currentItem);
-						break;
-					}
-					catch (SubmissionException e) {
-						log.warn("Update failed due to SubmissionException error: " + e.toString(), e);
-						currentItem.setStatus(ContentReviewItem.REPORT_ERROR_RETRY_CODE);
-						currentItem.setLastError(e.getMessage());
-						dao.update(currentItem);
-						break;
-					}
-
-					Element root = document.getDocumentElement();
-					if (((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("72") == 0) {
-						log.debug("Report list returned successfully");
-
-						NodeList objects = root.getElementsByTagName("object");
-						String objectId;
-						String similarityScore;
-						String overlap = "";
-						log.debug(objects.getLength() + " objects in the returned list");
-						for (int i=0; i<objects.getLength(); i++) {
-							similarityScore = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("similarityScore").item(0).getFirstChild())).getData().trim();
-							objectId = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("objectID").item(0).getFirstChild())).getData().trim();
-							if (similarityScore.compareTo("-1") != 0) {
-								overlap = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("overlap").item(0).getFirstChild())).getData().trim();
-								reportTable.put(objectId, Integer.valueOf(overlap));
-							} else {
-								reportTable.put(objectId, -1);
-							}
-
-							log.debug("objectId: " + objectId + " similarity: " + similarityScore + " overlap: " + overlap);
-						}
-					} else {
-						log.debug("Report list request not successful");
-						log.debug(document.getTextContent());
-
-					}
+				try {
+					document = turnitinConn.callTurnitinReturnDocument(params);
+				}
+				catch (TransientSubmissionException e) {
+					log.warn("Update failed due to TransientSubmissionException error: " + e.toString(), e);
+					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE);
+					currentItem.setLastError(e.getMessage());
+					crqServ.update(currentItem);
+					break;
+				}
+				catch (SubmissionException e) {
+					log.warn("Update failed due to SubmissionException error: " + e.toString(), e);
+					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE);
+					currentItem.setLastError(e.getMessage());
+					crqServ.update(currentItem);
+					break;
 				}
 
-				int reportVal;
-				// check if the report value is now there (there may have been a
-				// failure to get the list above)
-				if (reportTable.containsKey(currentItem.getExternalId())) {
-					reportVal = ((reportTable.get(currentItem.getExternalId())));
-					log.debug("reportVal for " + currentItem.getExternalId() + ": " + reportVal);
-					if (reportVal != -1) {
-						currentItem.setReviewScore(reportVal);
-						currentItem.setStatus(ContentReviewItem.SUBMITTED_REPORT_AVAILABLE_CODE);
-						currentItem.setDateReportReceived(new Date());
-						currentItem.setLastError(null);
-						currentItem.setErrorCode(null);
-						dao.update(currentItem);
+				Element root = document.getDocumentElement();
+				if (((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim().compareTo("72") == 0) {
+					log.debug("Report list returned successfully");
 
-						try
-						{
-							ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
-							boolean itemUpdated = updateItemAccess( resource.getId() );
-							if( !itemUpdated )
-							{
-								log.error( "Could not update cr item access status" );
-							}
-						}
-						catch( PermissionException | IdUnusedException | TypeException ex )
-						{
-							log.error( "Could not update cr item access status", ex );
+					NodeList objects = root.getElementsByTagName("object");
+					String objectId;
+					String similarityScore;
+					String overlap = "";
+					log.debug(objects.getLength() + " objects in the returned list");
+					for (int i=0; i<objects.getLength(); i++) {
+						similarityScore = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("similarityScore").item(0).getFirstChild())).getData().trim();
+						objectId = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("objectID").item(0).getFirstChild())).getData().trim();
+						if (similarityScore.compareTo("-1") != 0) {
+							overlap = ((CharacterData) (((Element)(objects.item(i))).getElementsByTagName("overlap").item(0).getFirstChild())).getData().trim();
+							reportTable.put(objectId, Integer.valueOf(overlap));
+						} else {
+							reportTable.put(objectId, -1);
 						}
 
-						log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
+						log.debug("objectId: " + objectId + " similarity: " + similarityScore + " overlap: " + overlap);
 					}
+				} else {
+					log.debug("Report list request not successful");
+					log.debug(document.getTextContent());
+
 				}
 			}
-			catch (Exception e)
-			{
-				log.error(e.getMessage() + "\n" + e.getStackTrace());
+
+			int reportVal;
+			// check if the report value is now there (there may have been a
+			// failure to get the list above)
+			if (reportTable.containsKey(currentItem.getExternalId())) {
+				reportVal = ((reportTable.get(currentItem.getExternalId())));
+				log.debug("reportVal for " + currentItem.getExternalId() + ": " + reportVal);
+				if (reportVal != -1) {
+					currentItem.setReviewScore(reportVal);
+					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE);
+					currentItem.setDateReportReceived(new Date());
+					currentItem.setLastError(null);
+					currentItem.setErrorCode(null);
+					crqServ.update(currentItem);
+
+					try
+					{
+						ContentResource resource = contentHostingService.getResource( currentItem.getContentId() );
+						boolean itemUpdated = updateItemAccess( resource.getId() );
+						if( !itemUpdated )
+						{
+							log.error( "Could not update cr item access status" );
+						}
+					}
+					catch( PermissionException | IdUnusedException | TypeException ex )
+					{
+						log.error( "Could not update cr item access status", ex );
+					}
+
+					log.debug("new report received: " + currentItem.getExternalId() + " -> " + currentItem.getReviewScore());
+				}
 			}
 		}
 
@@ -2350,7 +2426,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	}
 	
 	// SAK-27857	--bbailla2
-	public String[] getAcceptableFileExtensions()
+	private String[] getAcceptableFileExtensions()
 	{
 		String[] extensions = serverConfigurationService.getStrings(TurnitinConstants.SAK_PROP_ACCEPTABLE_FILE_EXTENSIONS);
 		if (extensions != null && extensions.length > 0)
@@ -2361,7 +2437,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	}
 
 	// TII-157	--bbailla2
-	public String[] getAcceptableMimeTypes()
+	private String[] getAcceptableMimeTypes()
 	{
 		String[] mimeTypes = serverConfigurationService.getStrings(TurnitinConstants.SAK_PROP_ACCEPTABLE_MIME_TYPES);
 		if (mimeTypes != null && mimeTypes.length > 0)
@@ -2372,9 +2448,1095 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	}
 	
 	// TII-157	--bbailla2
-	public String [] getAcceptableFileTypes()
+	private String [] getAcceptableFileTypes()
 	{
 		// TIITODO: no default value?
 		return serverConfigurationService.getStrings(TurnitinConstants.SAK_PROP_ACCEPTABLE_FILE_TYPES);
 	}
+	
+	// TIITODO: complete these two methods - public? Or private with specific methods for individual properties?
+	protected Optional<TiiActivityConfig> getActivityConfig(String toolId, String activityId)
+	{
+		/*Search search = new Search();
+		search.addRestricion(new Restriction("toolId", toolId));
+		search.addRestriction(new Restriction("activityId", activityId));
+		return Optional.ofNullable(dao.findOneBySearch(TiiActivityConfig.class, search));*/
+		
+		return Optional.empty();
+	}
+
+	protected boolean saveOrUpdateActivityConfig(TiiActivityConfig activityConfig)
+	{
+		// TIITODO: implement this using TiiActivityConfigDao
+		// ContentReviewItemDao extends HibernateCommonDao; save() invokes Session.saverOrUpdate()
+		//dao.save(activityConfig);
+		
+		// TIITODO: we need to return a boolean value because if the save fails we need to know
+		// probably can just catch whatever runtime exception hibernate throws these days
+		return true;
+ 	}
+	
+	/* TIITODO: remove these commented out methods after the switch to TiiActivityConfig is complete and working
+	@Override
+	public String getActivityConfigValue(String name, String activityId, String toolId, int providerId)
+	{
+		return getActivityConfigEntry(name, activityId, toolId, providerId)
+				.map(e -> StringUtils.trimToEmpty(e.getValue())).orElse("");
+
+	}
+	
+	private Optional<ContentReviewActivityConfigEntry> getActivityConfigEntry(String name, String activityId, String toolId, int providerId)
+	{
+		Search search = new Search();
+		search.addRestriction(new Restriction("name", name));
+		search.addRestriction(new Restriction("activityId", activityId));
+		search.addRestriction(new Restriction("toolId", toolId));
+		search.addRestriction(new Restriction("providerId", providerId));
+		return Optional.ofNullable(dao.findOneBySearch(ContentReviewActivityConfigEntry.class, search));
+	}
+
+	@Override
+	public boolean saveOrUpdateActivityConfigEntry(String name, String value, String activityId, String toolId, int providerId, boolean overrideIfSet)
+	{
+		if (StringUtils.isBlank(name) || StringUtils.isBlank(value) || StringUtils.isBlank(activityId) || StringUtils.isBlank(toolId))
+		{
+			return false;
+		}
+		
+		Optional<ContentReviewActivityConfigEntry> optEntry = getActivityConfigEntry(name, activityId, toolId, providerId);
+		if (!optEntry.isPresent())
+		{
+			try
+			{
+				dao.create(new ContentReviewActivityConfigEntry(name, value, activityId, toolId, providerId));
+				return true;
+			}
+			catch (DataIntegrityViolationException | ConstraintViolationException e)
+			{
+				// there is a uniqueness constraint on entry keys in the database
+				// a row with the same key was written after we checked, retrieve new data and continue
+				optEntry = getActivityConfigEntry(name, activityId, toolId, providerId);
+			}
+		}
+
+		if (overrideIfSet)
+		{
+			ContentReviewActivityConfigEntry entry = optEntry.orElseThrow( () -> new RuntimeException("Unique constraint violated during insert attempt, yet unable to retrieve row."));
+			entry.setValue(value);
+			dao.update(entry);
+			return true;
+		}
+
+		return false;
+	}*/
+	
+	private String getLocalizedReviewErrorMessage(String contentId)
+	{
+		log.debug("Returning review error for content: " + contentId);
+
+		Optional<ContentReviewItem> item = crqServ.getQueuedItem(getProviderId(), contentId);
+		
+		if (item.isPresent())
+		{
+			// its possible the error code column is not populated
+			Integer errorCode = item.get().getErrorCode();
+			if (errorCode == null)
+			{
+				return item.get().getLastError();
+			}
+			
+			return getLocalizedStatusMessage(errorCode.toString());
+		}
+
+		log.debug("Content " + contentId + " has not been queued previously");
+		return null;
+	}
+	
+	/**
+	 * Syncs an assignment and handles individual student extensions
+	 */
+	protected void syncAssignment(String siteId, String taskId, Map<String, Object> extraAsnnOpts, Date extensionDate) throws SubmissionException, TransientSubmissionException
+	{
+		Site s = null;
+		try {
+			s = siteService.getSite(siteId);
+		}
+		catch (IdUnusedException iue) {
+			log.warn("createAssignment: Site " + siteId + " not found!" + iue.getMessage());
+			throw new TransientSubmissionException("Create Assignment not successful. Site " + siteId + " not found");
+		}
+		org.sakaiproject.assignment.api.model.Assignment asn;
+		try
+		{
+			asn = assignmentService.getAssignment(taskId);
+		}
+		catch (IdUnusedException|PermissionException e)
+		{
+			asn = null;
+		}
+
+		//////////////////////////////  NEW LTI INTEGRATION  ///////////////////////////////
+		
+		Optional<Date> asnCreationDateOpt = getAssignmentCreationDate(asn);
+		if(asnCreationDateOpt.isPresent() && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, asnCreationDateOpt.get())){
+			log.debug("Creating new TII assignment using the LTI integration");
+			
+			String asnId = asnRefToId(taskId);  // taskId is an assignment reference, but we sometimes only want the assignment id
+			//String ltiId = getActivityConfigValue(TurnitinConstants.STEALTHED_LTI_ID, asnId, TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, TurnitinConstants.PROVIDER_ID);
+			String ltiId = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, asnId)
+					.map(TiiActivityConfig::getStealthedLtiId).orElse("");
+			String ltiReportsId = null;
+
+			ltiReportsId = s.getProperties().getProperty("turnitin_reports_lti_id");
+			log.debug("This assignment has associated the following LTI Reports id: " + ltiReportsId);
+			
+			Map<String,String> ltiProps = new HashMap<>();
+			if (extraAsnnOpts == null){
+				throw new TransientSubmissionException("Create Assignment not successful. Empty extraAsnnOpts map");
+			}
+
+			ltiProps.put("context_id", siteId);
+			ltiProps.put("context_title", s.getTitle());
+			String contextLabel = s.getTitle();
+			if(s.getShortDescription() != null){
+				contextLabel = s.getShortDescription();
+			}
+			ltiProps.put("context_label", contextLabel);
+			ltiProps.put("resource_link_id", taskId);
+			String title = extraAsnnOpts.get("title").toString();
+			ltiProps.put("resource_link_title", title);
+			String description = extraAsnnOpts.get("instructions").toString();
+			if(description != null){
+				description = description.replaceAll("\\<.*?>","");//TODO improve this
+				int instructionsMax = serverConfigurationService.getInt("contentreview.instructions.max", 1000);
+				if(description.length() > instructionsMax){
+					description = description.substring(0, instructionsMax);
+				}
+			}
+			ltiProps.put("resource_link_description", description);
+
+			// TII-245
+			if (!StringUtils.isBlank(ltiId))
+			{
+				// This is an existing LTI instance, need to handle student extensions
+				handleIndividualExtension(extensionDate, taskId, extraAsnnOpts);
+			}
+			
+			String custom = BasicLTIConstants.RESOURCE_LINK_ID + "=" + taskId;
+			custom += "\n" + BasicLTIConstants.RESOURCE_LINK_TITLE + "=" + title;
+			custom += "\n" + BasicLTIConstants.RESOURCE_LINK_DESCRIPTION + "=" + description;
+
+			try
+			{
+				long timestampOpen = (Long) extraAsnnOpts.get("timestampOpen");
+				long timestampDue = (Long) extraAsnnOpts.get("timestampDue");
+				// TII-245 - add a buffer to the TII due date to give time for the process queue job
+				timestampDue += serverConfigurationService.getInt("contentreview.due.date.queue.job.buffer.minutes", 0) * 60000;
+				ZonedDateTime open = ZonedDateTime.ofInstant(Instant.ofEpochMilli(timestampOpen), ZoneOffset.UTC);
+				ZonedDateTime due = ZonedDateTime.ofInstant(Instant.ofEpochMilli(timestampDue), ZoneOffset.UTC);
+				// Turnitin requires dates in ISO8601 format. The example from their documentation is "2014-12-10T07:43:43Z".
+				// This matches the Java formatter ISO_INSTANT
+				String isoStart = open.format(DateTimeFormatter.ISO_INSTANT);
+				String isoDue = due.format(DateTimeFormatter.ISO_INSTANT);
+				ltiProps.put("startdate", isoStart);
+				ltiProps.put("duedate", isoDue);
+				ltiProps.put("feedbackreleasedate", isoDue);
+				custom += "\n" + "startdate=" + isoStart;
+				custom += "\n" + "duedate=" + isoDue;
+				custom += "\n" + "feedbackreleasedate=" + isoDue;
+			}
+			catch (DateTimeException e)
+			{
+				log.error(e.getMessage(), e);
+				throw new TransientSubmissionException("Create Assignment not successful. Invalid open and/or due date.");
+			}
+			
+			ltiProps = putInstructorInfo(ltiProps, siteId);
+
+			/*
+			 * Force TII max points to 100 so we can interpret the result as a direct percentage.
+			 * This is done because Assignments now has the ability to grade to an arbitrary number of decimal places.
+			 * Due to the limitation of TII requiring whole integers for grading, we would have to inflate the grade by a
+			 * factor to the power of the number of decimal places allowed. This would result in unusually large numbers
+			 * on the TII, which could be confusing for the end user.
+			 */
+			ltiProps.put("maxpoints", "100");
+			custom += "\n" + "maxpoints=100";
+
+	        ltiProps.put("studentpapercheck", extraAsnnOpts.get("s_paper_check").toString());
+	        ltiProps.put("journalcheck",extraAsnnOpts.get("journal_check").toString());
+
+	        ltiProps.put("internetcheck", extraAsnnOpts.get("internet_check").toString());
+	        ltiProps.put("institutioncheck",extraAsnnOpts.get("institution_check").toString());
+			ltiProps.put("allow_non_or_submissions", extraAsnnOpts.get("allow_any_file").toString());
+
+			//ONLY FOR TII UK
+			//ltiProps.setProperty("anonymous_marking_enabled", extraAsnnOpts.get("s_paper_check"));
+			
+			custom += "\n" + "studentpapercheck=" + extraAsnnOpts.get("s_paper_check").toString();
+			custom += "\n" + "journalcheck=" + extraAsnnOpts.get("journal_check").toString();
+			custom += "\n" + "internetcheck=" + extraAsnnOpts.get("internet_check").toString();
+			custom += "\n" + "institutioncheck=" + extraAsnnOpts.get("institution_check").toString();
+			custom += "\n" + "allow_non_or_submissions=" + extraAsnnOpts.get("allow_any_file").toString();
+ 
+			if (extraAsnnOpts.containsKey("exclude_type") && extraAsnnOpts.containsKey("exclude_value")){
+				//exclude type 0=none, 1=words, 2=percentages
+				String typeAux = "words";
+				if(extraAsnnOpts.get("exclude_type").toString().equals("2")){
+					typeAux = "percentage";
+				}
+				ltiProps.put("exclude_type", typeAux);
+				ltiProps.put("exclude_value", extraAsnnOpts.get("exclude_value").toString());
+				custom += "\n" + "exclude_type=" + typeAux;
+				custom += "\n" + "exclude_value=" + extraAsnnOpts.get("exclude_value").toString();
+			}
+
+	        ltiProps.put("late_accept_flag", extraAsnnOpts.get("late_accept_flag").toString());
+	        ltiProps.put("report_gen_speed", extraAsnnOpts.get("report_gen_speed").toString());
+	        ltiProps.put("s_view_reports", extraAsnnOpts.get("s_view_report").toString());			
+	        ltiProps.put("submit_papers_to", extraAsnnOpts.get("submit_papers_to").toString());
+			
+			custom += "\n" + "late_accept_flag=" + extraAsnnOpts.get("late_accept_flag").toString();			
+			custom += "\n" + "report_gen_speed=" + extraAsnnOpts.get("report_gen_speed").toString();
+			custom += "\n" + "s_view_reports=" + extraAsnnOpts.get("s_view_report").toString();
+			custom += "\n" + "submit_papers_to=" + extraAsnnOpts.get("submit_papers_to").toString();
+
+			if (extraAsnnOpts.containsKey("exclude_biblio")){
+				ltiProps.put("use_biblio_exclusion", extraAsnnOpts.get("exclude_biblio").toString());
+				custom += "\n" + "use_biblio_exclusion=" + extraAsnnOpts.get("exclude_biblio").toString();
+			}
+			if (extraAsnnOpts.containsKey("exclude_quoted")){
+				ltiProps.put("use_quoted_exclusion", extraAsnnOpts.get("exclude_quoted").toString());
+				custom += "\n" + "use_quoted_exclusion=" + extraAsnnOpts.get("exclude_quoted").toString();
+			}
+ 			
+			//adding callback url
+			String callbackUrl = serverConfigurationService.getServerUrl() + "/sakai-contentreview-tool-tii/tii-servlet";
+			log.debug("callbackUrl: " + callbackUrl);
+			ltiProps.put("ext_resource_tool_placement_url", callbackUrl);
+			
+			TurnitinReturnValue result = tiiUtil.makeLTIcall(TurnitinLTIUtil.BASIC_ASSIGNMENT, null, ltiProps);
+			if(result.getResult() < 0){
+				log.error("Error making LTI call");
+				throw new TransientSubmissionException("Create Assignment not successful. Check the logs to see message.");
+			}
+			
+			Properties sakaiProps = new Properties();
+			String globalId = tiiUtil.getGlobalTurnitinLTIToolId();
+			String globalReportsId = tiiUtil.getGlobalTurnitinReportsLTIToolId();
+			if(globalId == null){
+				throw new TransientSubmissionException("Create Assignment not successful. TII LTI global id not set");
+			}
+			if (globalReportsId == null){
+				throw new TransientSubmissionException("Create Assignment not successful. TII Reports LTI global id not set");
+			}
+
+			sakaiProps.setProperty(LTIService.LTI_SITE_ID,siteId);
+			sakaiProps.setProperty(LTIService.LTI_TITLE,title);
+
+			log.debug("Storing custom params: " + custom);
+			sakaiProps.setProperty(LTIService.LTI_CUSTOM,custom);
+
+			SecurityAdvisor advisor = new TurnitinReviewServiceImpl.SimpleSecurityAdvisor(sessionManager.getCurrentSessionUserId(), "site.upd", "/site/!admin");
+			Object ltiContent = null;
+			Object ltiReportsContent = null;
+			try{
+				securityService.pushAdvisor(advisor);
+				sakaiProps.setProperty(LTIService.LTI_TOOL_ID, globalId);
+				if(StringUtils.isEmpty(ltiId)){
+					ltiContent = tiiUtil.insertTIIToolContent(globalId, sakaiProps);
+				} else {//don't create lti tool if exists
+					ltiContent = tiiUtil.updateTIIToolContent(ltiId, sakaiProps);
+				}				
+				// replace the property
+				sakaiProps.setProperty(LTIService.LTI_TOOL_ID, globalReportsId);
+				if (StringUtils.isEmpty(ltiReportsId))
+				{
+					ltiReportsContent = tiiUtil.insertTIIToolContent(globalReportsId, sakaiProps);
+				}
+				else
+				{
+					ltiReportsContent = tiiUtil.updateTIIToolContent(ltiReportsId, sakaiProps);
+				}
+			} catch(Exception e){
+				throw new TransientSubmissionException("Create Assignment not successful. Error trying to insert TII tool content: " + e.getMessage());
+			} finally {
+				securityService.popAdvisor(advisor);
+			}
+				
+			if(ltiContent == null){
+				throw new TransientSubmissionException("Create Assignment not successful. Could not create LTI tool for the task: " + custom);
+
+			} else if (ltiReportsContent == null){
+				throw new TransientSubmissionException("Create Assignment not successful. Could not create LTI Reports tool for the task: " + custom);
+			} else if (!StringUtils.isEmpty(ltiId) && !Boolean.TRUE.equals(ltiContent)){
+				// if ltiId is not empty, the lti already exists, so we did an update. ltiContent is Boolean.TRUE if the update was successful
+				throw new TransientSubmissionException("Update Assignment not successful. Error updating LTI stealthed tool: " + ltiId);
+			} else if (ltiReportsId != null && !Boolean.TRUE.equals(ltiReportsContent)){
+				throw new TransientSubmissionException("Update Assignment not successful. Error updating LTI reports stealthed tool: " + ltiReportsContent);
+			} else if (StringUtils.isEmpty(ltiId) && !(ltiContent instanceof Long)){
+				// if ltiId is empty, the lti is new, so we did an insert. ltiContent is a Long primary key if the update was successful
+				throw new TransientSubmissionException("Create Assignment not successful. Error creating LTI stealthed tool: " + ltiContent);
+			} else if (ltiReportsId == null && !(ltiReportsContent instanceof Long)){
+				throw new TransientSubmissionException("Create Assignment not successful. Error creating LTI stealthed tool: " + ltiReportsContent);
+			}
+			if (StringUtils.isEmpty(ltiId) || ltiReportsId == null) {//we inserted, need to record the IDs
+				log.debug("LTI content tool id: " + ltiContent);
+				try{
+
+					if (ltiReportsId == null)
+					{
+						ResourcePropertiesEdit rpe = s.getPropertiesEdit();
+						rpe.addProperty("turnitin_reports_lti_id", String.valueOf(ltiReportsContent));
+						siteService.save(s);
+					}
+				}
+				catch (IdUnusedException e)
+				{
+					log.error("Could not store reports LTI tool ID " + ltiReportsContent + " for site " + s.getId(), e);
+					throw new TransientSubmissionException("Create Assignment not successful. Error storing LTI stealthed reports tool: " + ltiReportsContent);
+				}
+				catch (PermissionException e)
+				{
+					log.error("Could not store reports LTI tool ID " + ltiReportsContent + " for site " + s.getId(), e);
+					throw new TransientSubmissionException("Create Assignment not successful. Error storing LTI stealthed reports tool: " + ltiReportsContent);
+				}
+
+				/*boolean added = saveOrUpdateActivityConfigEntry(TurnitinConstants.STEALTHED_LTI_ID, String.valueOf(ltiContent), asnId, TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID,
+						TurnitinConstants.PROVIDER_ID, true);*/
+				TiiActivityConfig cfg = new TiiActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, asnId, String.valueOf(ltiContent));
+				boolean added = saveOrUpdateActivityConfig(cfg);
+				if (!added)
+				{
+					log.error("Could not store LTI tool ID " + ltiContent + " for assignment " + taskId);
+					throw new TransientSubmissionException("Create Assignment not successful. Error storing LTI stealthed tool: " + ltiContent);
+				}
+			}
+			
+			//add submissions to the queue if there is any
+			try{
+				log.debug("Adding previous submissions");
+				//this will be done always - no problem, extra checks
+				log.debug("Assignment " + asn.getId() + " - " + asn.getTitle());
+				Set<AssignmentSubmission> submissions = assignmentService.getSubmissions(asn);
+				if(submissions != null){
+					for(AssignmentSubmission sub : submissions){
+						//if submitted
+						if(sub.getSubmitted()){
+							log.debug("Submission " + sub.getId());
+							// TIITODO: figure out/add the appropriate replacement for isAllowAnyFile()
+							//boolean allowAnyFile = asn.getContent().isAllowAnyFile();
+							boolean allowAnyFile = true; // TIITODO: remove this temp line once above is worked out
+							List<ContentResource> resources = getAllAcceptableAttachments(sub,allowAnyFile);
+
+							// determine the owner of the submission for purposes of content review
+							// TIITODO: figure out/add the appropriate replacements for the two sub methods below
+							//String ownerId = asn.getIsGroup() ? sub.getSubmittedForGroupByUserId() : sub.getSubmitterId();
+							String ownerId = "";  // TIITODO: remove this temp line once above is worked out
+							if (ownerId.isEmpty())
+							{
+								String msg = "Unable to submit content items to review service for submission %s to assignment %s. "
+										+ "An appropriate owner for the submission cannot be determined.";
+								log.warn(String.format(msg, sub.getId(), asn.getId()));
+								continue;
+							}
+
+							List<ContentResource> toQueue = new ArrayList<>();
+							for(ContentResource resource : resources)
+							{
+								//if it wasnt added
+								if (!dao.findByProviderAndContentId(getProviderId(), resource.getId()).isPresent())
+								{
+									log.debug(resource.getId() + " was not added previously, queueing now");
+									toQueue.add(resource);
+								}
+								//else - is there anything or any status we should check?
+							}
+							
+							if (!toQueue.isEmpty())
+							{
+								//queueContent(ownerId, null, asn.getReference(), resource.getId(), sub.getId(), false);
+								// TIITODO: confirm the below call is an appropriate replacement for the above. There
+								// is no longer a getReference() method on asn, and the queueContent signature has changed.
+								queueContent(ownerId, null, asn.getId(), toQueue);
+							}
+						}
+					}
+				}	
+			} catch(Exception e){
+				log.warn("Error while tying to queue previous submissions.");
+			}
+			
+			return;
+		}
+		
+		//////////////////////////////  OLD API INTEGRATION  ///////////////////////////////
+	
+		//get the assignment reference
+		String taskTitle = "";
+		if(extraAsnnOpts.containsKey("title")){
+			taskTitle = extraAsnnOpts.get("title").toString();
+		}else{
+			getAssignmentTitle(taskId);
+		}
+		log.debug("Creating assignment for site: " + siteId + ", task: " + taskId +" tasktitle: " + taskTitle);
+
+		SimpleDateFormat dform = ((SimpleDateFormat) DateFormat.getDateInstance());
+		dform.applyPattern(TurnitinConstants.TURNITIN_DATETIME_FORMAT);
+		Calendar cal = Calendar.getInstance();
+		//set this to yesterday so we avoid timezone problems etc
+		//TII-143 seems this now causes problems may need a finner tweak than 1 day like midnight +1 min or something
+		cal.set(Calendar.HOUR, 0);
+		cal.set(Calendar.MINUTE, 1);
+		//cal.add(Calendar.DAY_OF_MONTH, -1);
+		String dtstart = dform.format(cal.getTime());
+		String today = dtstart;
+
+		//set the due dates for the assignments to be in 5 month's time
+		//turnitin automatically sets each class end date to 6 months after it is created
+		//the assignment end date must be on or before the class end date
+
+		String fcmd = "2";                                            //new assignment
+		boolean asnnExists = false;
+		// If this assignment already exists, we should use fcmd 3 to update it.
+		Map tiiresult = this.getAssignment(siteId, taskId);
+		if (tiiresult.get("rcode") != null && tiiresult.get("rcode").equals("85")) {
+		    fcmd = "3";
+		    asnnExists = true;
+		}
+
+		/* Some notes about start and due dates. This information is
+		 * accurate as of Nov 12, 2009 and was determined by testing
+		 * and experimentation with some Sash scripts.
+		 *
+		 * A turnitin due date, must be after the start date. This makes
+		 * sense and follows the logic in both Assignments 1 and 2.
+		 *
+		 * When *creating* a new Turnitin Assignment, the start date
+		 * must be todays date or later.  The format for dates only
+		 * includes the day, and not any specific times. I believe that,
+		 * in order to make up for time zone differences between your
+		 * location and the turnitin cloud, it can be basically the
+		 * current day anywhere currently, with some slack. For instance
+		 * I can create an assignment for yesterday, but not for 2 days
+		 * ago. Doing so causes an error.
+		 *
+		 * However!  For an existing turnitin assignment, you appear to
+		 * have the liberty of changing the start date to sometime in
+		 * the past. You can also change an assignment to have a due
+		 * date in the past as long as it is still after the start date.
+		 *
+		 * So, to avoid errors when syncing information, or adding
+		 * turnitin support to new or existing assignments we will:
+		 *
+		 * 1. If the assignment already exists we'll just save it.
+		 *
+		 * 2. If the assignment does not exist, we will save it once using
+		 * todays date for the start and due date, and then save it again with
+		 * the proper dates to ensure we're all tidied up and in line.
+		 *
+		 * Also, with our current class creation, due dates can be 5
+		 * years out, but not further. This seems a bit lower priortity,
+		 * but we still should figure out an appropriate way to deal
+		 * with it if it does happen.
+		 *
+		 */
+
+
+
+		//TODO use the 'secret' function to change this to longer
+		cal.add(Calendar.MONTH, 5);
+		String dtdue = dform.format(cal.getTime());
+		log.debug("Set date due to: " + dtdue);
+		if (extraAsnnOpts != null && extraAsnnOpts.containsKey("dtdue")) {
+			dtdue = extraAsnnOpts.get("dtdue").toString();
+			log.debug("Settign date due from external to: " + dtdue);
+			extraAsnnOpts.remove("dtdue");
+		}
+
+		String fid = "4";						//function id
+		String utp = "2"; 					//user type 2 = instructor
+		String s_view_report = "1";
+		if (extraAsnnOpts != null && extraAsnnOpts.containsKey("s_view_report")) {
+			s_view_report = extraAsnnOpts.get("s_view_report").toString();
+			extraAsnnOpts.remove("s_view_report");
+		}
+
+		//erater
+		String erater = (serverConfigurationService.getBoolean("turnitin.option.erater.default", false)) ? "1" : "0";
+		String ets_handbook ="1";
+		String ets_dictionary="en";
+		String ets_spelling = "1";
+		String ets_style = "1";
+		String ets_grammar = "1";
+		String ets_mechanics = "1";
+		String ets_usage = "1";
+
+		try{
+			if (extraAsnnOpts != null && extraAsnnOpts.containsKey("erater")) {
+				erater = extraAsnnOpts.get("erater").toString();
+				extraAsnnOpts.remove("erater");
+
+				ets_handbook = extraAsnnOpts.get("ets_handbook").toString();
+				extraAsnnOpts.remove("ets_handbook");
+
+				ets_dictionary = extraAsnnOpts.get("ets_dictionary").toString();
+				extraAsnnOpts.remove("ets_dictionary");
+
+				ets_spelling = extraAsnnOpts.get("ets_spelling").toString();
+				extraAsnnOpts.remove("ets_spelling");
+
+				ets_style = extraAsnnOpts.get("ets_style").toString();
+				extraAsnnOpts.remove("ets_style");
+
+				ets_grammar = extraAsnnOpts.get("ets_grammar").toString();
+				extraAsnnOpts.remove("ets_grammar");
+
+				ets_mechanics = extraAsnnOpts.get("ets_mechanics").toString();
+				extraAsnnOpts.remove("ets_mechanics");
+
+				ets_usage = extraAsnnOpts.get("ets_usage").toString();
+				extraAsnnOpts.remove("ets_usage");
+			}
+		}catch(Exception e){
+			log.info("(createAssignment)erater extraAsnnOpts. "+e);
+		}
+
+		String cid = siteId;
+		String assignid = taskId;
+		String ctl = siteId;
+
+		Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+				"assign", taskTitle,
+				"assignid", assignid,
+				"cid", cid,
+				"ctl", ctl,
+				"dtdue", dtdue,
+				"dtstart", dtstart,
+				"fcmd", "3",
+				"fid", fid,
+				"s_view_report", s_view_report,
+				"utp", utp,
+				"erater",erater,
+				"ets_handbook",ets_handbook,
+				"ets_dictionary",ets_dictionary,
+				"ets_spelling",ets_spelling,
+				"ets_style",ets_style,
+				"ets_grammar",ets_grammar,
+				"ets_mechanics",ets_mechanics,
+				"ets_usage",ets_usage
+				);
+
+		// Save instructorInfo up here to reuse for calls in this
+		// method, since theoretically getInstructorInfo could return
+		// different instructors for different invocations and we need
+		// the same one since we're using a session id.
+		Map instructorInfo = getInstructorInfo(siteId);
+		params.putAll(instructorInfo);
+
+		if (extraAsnnOpts != null) {
+			for (Object key: extraAsnnOpts.keySet()) {
+				if (extraAsnnOpts.get(key) == null) {
+					continue;
+				}
+				params = TurnitinAPIUtil.packMap(params, key.toString(),
+						extraAsnnOpts.get(key).toString());
+			}
+		}
+
+		// We only need to use a session id if we are creating this
+		// assignment for the first time.
+		String sessionid = null;
+		Map sessionParams = null;
+
+		if (!asnnExists) {
+			// Try adding the user in case they don't exist TII-XXX
+			addTurnitinInstructor(instructorInfo);
+
+			sessionParams = turnitinConn.getBaseTIIOptions();
+			sessionParams.putAll(instructorInfo);
+			sessionParams.put("utp", utp);
+			sessionid = TurnitinSessionFuncs.getTurnitinSession(turnitinConn, sessionParams);
+
+			Map firstparams = new HashMap();
+			firstparams.putAll(params);
+			firstparams.put("session-id", sessionid);
+			firstparams.put("dtstart", today);
+
+			// Make the due date in the future
+			Calendar caldue = Calendar.getInstance();
+			caldue.add(Calendar.MONTH, 5);
+			String dtdue_first = dform.format(caldue.getTime());
+			firstparams.put("dtdue", dtdue_first);
+
+			log.debug("date due is: " + dtdue);
+			log.debug("Start date: " + today);
+			firstparams.put("fcmd", "2");
+			Document firstSaveDocument =
+				turnitinConn.callTurnitinReturnDocument(firstparams);
+			Element root = firstSaveDocument.getDocumentElement();
+			int rcode = new Integer(((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim());
+			if ((rcode > 0 && rcode < 100) || rcode == 419) {
+				log.debug("Create FirstDate Assignment successful");
+				log.debug("tii returned " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
+			} else {
+				log.debug("FirstDate Assignment creation failed with message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
+				//log.debug(root);
+				throw new TransientSubmissionException("FirstDate Create Assignment not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode
+						, rcode);
+			}
+		}
+		log.debug("going to attempt second update");
+		if (sessionid != null) {
+		    params.put("session-id", sessionid);
+		}
+		Document document = turnitinConn.callTurnitinReturnDocument(params);
+
+		Element root = document.getDocumentElement();
+		int rcode = new Integer(((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim());
+		if ((rcode > 0 && rcode < 100) || rcode == 419) {
+			log.debug("Create Assignment successful");
+			log.debug("tii returned " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
+		} else {
+			log.debug("Assignment creation failed with message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
+			//log.debug(root);
+			throw new TransientSubmissionException("Create Assignment not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode
+					, rcode);
+		}
+
+		if (sessionid != null) {
+		    TurnitinSessionFuncs.logoutTurnitinSession(turnitinConn, sessionid, sessionParams);
+		}
+	}
+	
+	private boolean updateItemAccess(String contentId)
+	{
+		//return dao.updateIsUrlAccessed( contentId, true );
+		// TIITODO: implement above using TiiContentReviewItemDao or equivalent
+		
+		return true; // TIITODO: remove this temp line once above is worked out
+	}
+	
+	/**
+	 * This will add to the LTI map the information for the instructor such as
+	 * uem, username, ufn, etc. If the system is configured to use src9
+	 * provisioning, this will draw information from the current thread based
+	 * user. Otherwise it will use the default Instructor information that has
+	 * been configured for the system.
+	 *
+	 * @param ltiProps
+	 * @param siteId
+	 * @return
+	 */
+	@SuppressWarnings("unchecked")
+	// TIITODO: generics on these maps?
+	private Map putInstructorInfo(Map ltiProps, String siteId) {
+
+		log.debug("Putting instructor info for site " + siteId);
+
+		if (!turnitinConn.isUseSourceParameter()) {
+			ltiProps.put("roles", "Instructor");
+			ltiProps.put("user_id", turnitinConn.getDefaultInstructorId());
+			ltiProps.put("lis_person_contact_email_primary", turnitinConn.getDefaultInstructorEmail());
+			ltiProps.put("lis_person_name_given", turnitinConn.getDefaultInstructorFName());
+			ltiProps.put("lis_person_name_family", turnitinConn.getDefaultInstructorLName());
+			ltiProps.put("lis_person_name_full", turnitinConn.getDefaultInstructorFName() + " " + turnitinConn.getDefaultInstructorLName());
+		} else {
+			String INST_ROLE = "section.role.instructor";
+			User inst = null;
+			try {
+				Site site = siteService.getSite(siteId);
+				User user = userDirectoryService.getCurrentUser();
+	
+				log.debug("Current user: " + user.getId());
+
+				if (site.isAllowed(user.getId(), INST_ROLE)) {
+					inst = user;
+				} else {
+					Set<String> instIds = getActiveInstructorIds(INST_ROLE,	site);
+					if (instIds.size() > 0) {
+						inst = userDirectoryService.getUser((String) instIds.toArray()[0]);
+					}
+				}
+			} catch (IdUnusedException e) {
+				log.error("Unable to fetch site in putInstructorInfo: " + siteId, e);
+			} catch (UserNotDefinedException e) {
+				log.error("Unable to fetch user in putInstructorInfo", e);
+			}
+
+			if (inst == null) {
+				log.error("Instructor is null in putInstructorInfo");
+			} else {
+				ltiProps.put("roles", "Instructor");
+				ltiProps.put("user_id", inst.getId());
+				ltiProps.put("lis_person_contact_email_primary", getEmail(inst));
+				ltiProps.put("lis_person_name_given", inst.getFirstName());
+				ltiProps.put("lis_person_name_family", inst.getLastName());
+				ltiProps.put("lis_person_name_full", inst.getDisplayName());
+			}
+		}
+
+		return ltiProps;
+	}
+	
+	//Methods for updating all assignments that exist
+	private void doAssignments()
+	{
+		log.info("About to update all turnitin assignments");
+		
+		List<ContentReviewItem> items = crqServ.getAllContentReviewItemsGroupedBySiteAndTask(getProviderId());
+		
+		for (ContentReviewItem item : items)
+		{
+			try
+			{
+				updateAssignment(item.getSiteId(), item.getTaskId());
+			}
+			catch (SubmissionException e)
+			{
+				log.warn(e.getMessage(), e);
+			}
+		}
+	}
+	
+	// copied from protected method assignmentId() in BaseAssignmentService
+	// might be better to just make that method public
+	private String asnRefToId(String ref)
+	{
+		if (ref == null) return ref;
+		int i = ref.lastIndexOf(Entity.SEPARATOR);
+		if (i == -1) return ref;
+		String id = ref.substring(i + 1);
+		return id;
+	}
+	
+	/**
+	 * TII-245
+	 * Handles individual extensions
+	 * After Turnitin's due date, it will only accept a paper if one has not already been submitted.
+	 * When "Select User(s)and Allow Resubmission" is used, we have to push the due date back on the TII end to accommodate multiple submissions
+	 */
+	private void handleIndividualExtension(Date extensionDate, String taskId, Map<String, Object> extraAsnOpts)
+	{	
+		// Get the latest offered extenion.
+		// We keep track of this in the activity config table to save us from querying every submission to find the latest extension.
+		// This comes at the cost that we can never move TII's due date earlier once we've granted an extension; we can only push it out
+		/*String strLatestExtensionDate = getActivityConfigValue(TurnitinConstants.TURNITIN_ASN_LATEST_INDIVIDUAL_EXTENSION_DATE,
+				TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId, TurnitinConstants.PROVIDER_ID);*/
+		long latestExtensionDate = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId)
+				.map(cfg -> cfg.getLatestIndividualExtensionDate().getTime()).orElse(0L);
+		if (extensionDate != null)
+		{
+			// The due date we're sending to TII (latest of accept until / resubmit accept until)
+			long timestampDue = (Long) extraAsnOpts.get("timestampDue");
+			try
+			{
+				// Find what's later: the new extension date or the latest existing extension date
+
+				// We are offering a student an individual extension, handle if it's later than the current latest extension date
+				long lExtensionDate = extensionDate.getTime();
+				if (lExtensionDate > latestExtensionDate)
+				{
+					// we have a new latest extension date
+					// TIITODO: save/update this using the appropriate TiiActivityConfigDao method
+					/*saveOrUpdateActivityConfigEntry(TurnitinConstants.TURNITIN_ASN_LATEST_INDIVIDUAL_EXTENSION_DATE,
+							String.valueOf(lExtensionDate), TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId,
+							TurnitinConstants.PROVIDER_ID, true);*/
+					latestExtensionDate = lExtensionDate;
+				}
+
+				// Push Turnitin's due date back if we need to accommodate an extension later than the due date
+				if (latestExtensionDate > timestampDue)
+				{
+					// push the due date to the latest extension date
+					extraAsnOpts.put("timestampDue", latestExtensionDate);
+				}
+			}
+			catch (NumberFormatException nfe)
+			{
+				log.warn("NumberFormatException thrown when parsing either the timestampDue option: " + timestampDue);
+			}
+		}
+	}
+	
+	/**
+	 * A simple SecurityAdviser that can be used to override permissions for one user for one function.
+	 */
+	protected class SimpleSecurityAdvisor implements SecurityAdvisor
+	{
+		protected String m_userId;
+		protected String m_function;
+		protected String m_reference;
+
+		public SimpleSecurityAdvisor(String userId, String function, String reference)
+		{
+			m_userId = userId;
+			m_function = function;
+			m_reference = reference;
+		}
+
+		public SecurityAdvisor.SecurityAdvice isAllowed(String userId, String function, String reference)
+		{
+			SecurityAdvisor.SecurityAdvice rv = SecurityAdvisor.SecurityAdvice.PASS;
+			if (m_userId.equals(userId) && m_function.equals(function) && m_reference.equals(reference))
+			{
+				rv = SecurityAdvisor.SecurityAdvice.ALLOWED;
+			}
+			return rv;
+		}
+	}
+	
+	private List<ContentResource> getAllAcceptableAttachments(AssignmentSubmission sub, boolean allowAnyFile)
+	{
+		// TIITODO: implement the missing method on AssignmentSubmission or replace with suitable alternative
+		//List attachments = sub.getSubmittedAttachments();
+		List attachments = Collections.emptyList();  // TIITODO: replace this temp line after above is worked out
+		List<ContentResource> resources = new ArrayList<>();
+        for (int i = 0; i < attachments.size(); i++) {
+            Reference attachment = (Reference) attachments.get(i);
+            try {
+                ContentResource res = contentHostingService.getResource(attachment.getId());
+                if (isAcceptableSize(res) && (allowAnyFile || isAcceptableContent(res))) {
+                    resources.add(res);
+                }
+            } catch (PermissionException | IdUnusedException | TypeException e) {
+                log.warn(":getAllAcceptableAttachments " + e.getMessage());
+            }
+        }
+        return resources;
+	}
+	
+	private boolean isAcceptableSize(ContentResource resource)
+	{
+		return turnitinContentValidator.isAcceptableSize(resource);
+	}
+	
+	private void addTurnitinInstructor(Map userparams) throws SubmissionException, TransientSubmissionException {
+		Map params = new HashMap();
+		params.putAll(userparams);
+		params.putAll(turnitinConn.getBaseTIIOptions());
+		params.put("fid", "1");
+		params.put("fcmd", "2");
+		params.put("utp", "2");
+		turnitinConn.callTurnitinReturnMap(params);
+	}
+	
+	/**
+	 * Update Assignment. This method is not currently called by Assignments 1.
+	 * @param siteId
+	 * @param taskId
+	 * @throws org.sakaiproject.contentreview.exception.SubmissionException
+	 */
+	private void updateAssignment(String siteId, String taskId) throws SubmissionException {
+		log.info("updateAssignment(" + siteId +" , " + taskId + ")");
+		//get the assignment reference
+		String taskTitle = getAssignmentTitle(taskId);
+		log.debug("Creating assignment for site: " + siteId + ", task: " + taskId +" tasktitle: " + taskTitle);
+
+		SimpleDateFormat dform = ((SimpleDateFormat) DateFormat.getDateInstance());
+		dform.applyPattern(TurnitinConstants.TURNITIN_DATETIME_FORMAT);
+		Calendar cal = Calendar.getInstance();
+		//set this to yesterday so we avoid timezpne problems etc
+		cal.add(Calendar.DAY_OF_MONTH, -1);
+		String dtstart = dform.format(cal.getTime());
+
+
+		//set the due dates for the assignments to be in 5 month's time
+		//turnitin automatically sets each class end date to 6 months after it is created
+		//the assignment end date must be on or before the class end date
+
+		//TODO use the 'secret' function to change this to longer
+		cal.add(Calendar.MONTH, 5);
+		String dtdue = dform.format(cal.getTime());
+
+		String fcmd = "3";						//new assignment
+		String fid = "4";						//function id
+		String utp = "2"; 					//user type 2 = instructor
+		String s_view_report = "1";
+
+                                            //erater
+		String erater = "0";
+                                           String ets_handbook ="1";
+                                           String ets_dictionary="en";
+                                           String ets_spelling = "1";
+                                           String ets_style = "1";
+                                           String ets_grammar = "1";
+                                           String ets_mechanics = "1";
+                                           String ets_usage = "1";
+
+		String cid = siteId;
+		String assignid = taskId;
+		String assign = taskTitle;
+		String ctl = siteId;
+
+		String assignEnc = assign;
+		try {
+			if (assign.contains("&")) {
+				//log.debug("replacing & in assignment title");
+				assign = assign.replace('&', 'n');
+
+			}
+			assignEnc = assign;
+			log.debug("Assign title is " + assignEnc);
+
+		}
+		catch (Exception e) {
+			log.debug( e.getMessage(), e );
+		}
+
+		Map params = TurnitinAPIUtil.packMap(turnitinConn.getBaseTIIOptions(),
+				"assign", assignEnc,
+				"assignid", assignid,
+				"cid", cid,
+				"ctl", ctl,
+				"dtdue", dtdue,
+				"dtstart", dtstart,
+				"fcmd", fcmd,
+				"fid", fid,
+				"s_view_report", s_view_report,
+				"utp", utp,
+                                                                                      "erater",erater,
+                                                                                      "ets_handbook",ets_handbook,
+                                                                                      "ets_dictionary",ets_dictionary,
+                                                                                      "ets_spelling",ets_spelling,
+                                                                                      "ets_style",ets_style,
+                                                                                      "ets_grammar",ets_grammar,
+                                                                                      "ets_mechanics",ets_mechanics,
+                                                                                      "ets_usage",ets_usage
+		);
+
+		params.putAll(getInstructorInfo(siteId));
+
+		Document document;
+
+		try {
+			document = turnitinConn.callTurnitinReturnDocument(params);
+		}
+		catch (TransientSubmissionException | SubmissionException tse) {
+			log.error("Error on API call in updateAssignment siteid: " + siteId + " taskid: " + taskId, tse);
+			return;
+		}
+
+		Element root = document.getDocumentElement();
+		int rcode = new Integer(((CharacterData) (root.getElementsByTagName("rcode").item(0).getFirstChild())).getData().trim());
+		if ((rcode > 0 && rcode < 100) || rcode == 419) {
+			log.debug("Create Assignment successful");
+		} else {
+			log.debug("Assignment creation failed with message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
+			throw new SubmissionException("Create Assignment not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
+		}
+	}
+	
+	/*
+	 * Get the next item that needs to be submitted
+	 *
+	 */
+	private Optional<ContentReviewItem> getNextItemInSubmissionQueue()
+	{
+		Optional<ContentReviewItem> nextItem = crqServ.getNextItemInQueueToSubmit(getProviderId());
+		if (!nextItem.isPresent())
+		{
+			nextItem = dao.findSingleItemToSubmitMissingExternalId(getProviderId());
+		}
+		
+		// TIITODO: old code used to handle setting the retry time if it was null. Do we still need to do this?
+		// Possibly for items that have not yet been submitted?
+		
+		return nextItem;
+		
+		// TIITODO: remove commented out code (and methods) below once we know above code works		
+		
+		// Submit items that haven't yet been submitted
+		/*Search search = new Search();
+		search.addRestriction(new Restriction("status", ContentReviewItem.NOT_SUBMITTED_CODE));
+		List<ContentReviewItem> notSubmittedItems = dao.findBySearch(ContentReviewItem.class, search);
+		for( ContentReviewItem item : notSubmittedItems ) {
+
+			// can we get a lock?
+			if (obtainLock("item." + item.getId().toString())) {
+				return item;
+			}
+		}
+
+		// Submit items that should be retried
+		search = new Search();
+		search.addRestriction(new Restriction("status", ContentReviewItem.SUBMISSION_ERROR_RETRY_CODE));
+		notSubmittedItems = dao.findBySearch(ContentReviewItem.class, search);
+		ContentReviewItem nextItem = getNotSubmittedItemPastRetryTime( notSubmittedItems );
+		if( nextItem != null )
+		{
+			return nextItem;
+		}
+
+		// submit items that are awaiting reports, but the externalId is null (Ie. they've been submitted, but the callback to set the externalId failed).
+		search = new Search();
+		search.addRestriction(new Restriction("status", ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE));
+		search.addRestriction(new Restriction("externalId", "", Restriction.NULL));
+		notSubmittedItems = dao.findBySearch(ContentReviewItem.class, search);
+		nextItem = getNotSubmittedItemPastRetryTime(notSubmittedItems);
+		if (nextItem != null)
+		{
+			return nextItem;
+		}
+
+		// submit items that are awaiting reports in an errory_retry state, and the externalId is null (similar to above condition, just happens to be in an errory_retry state)
+		search = new Search();
+		search.addRestriction(new Restriction("status", ContentReviewItem.REPORT_ERROR_RETRY_CODE));
+		search.addRestriction(new Restriction("externalId", "", Restriction.NULL));
+		notSubmittedItems = dao.findBySearch(ContentReviewItem.class, search);
+		nextItem = getNotSubmittedItemPastRetryTime(notSubmittedItems);
+		if (nextItem != null)
+		{
+			return nextItem;
+		}
+
+		// Submit items that were previously marked as missing submitter details (first name, last name, email)
+		search = new Search();
+		search.addRestriction( new Restriction( "status", ContentReviewItem.SUBMISSION_ERROR_USER_DETAILS_CODE ) );
+		notSubmittedItems = dao.findBySearch( ContentReviewItem.class, search );
+		nextItem = getNotSubmittedItemPastRetryTime( notSubmittedItems );
+
+		// At this point, nextItem could be null (indicating the submission queue is empty)
+		return nextItem;*/
+	}
+	
+	// TIITODO: remove if we don't need these (see above)
+	/**
+	 * Returns the first item in the list which has surpassed it's next retry time, and we can get a lock on the object.
+	 * Otherwise returns null.
+	 * 
+	 * @param notSubmittedItems the list of ContentReviewItems to iterate over.
+	 * @return the first item in the list that meets the requirements, or null.
+	 */
+	/*private ContentReviewItem getNotSubmittedItemPastRetryTime( List<ContentReviewItem> notSubmittedItems )
+	{
+		for( ContentReviewItem item : notSubmittedItems )
+		{
+			if( hasReachedRetryTime( item ) && obtainLock( "item." + item.getId().toString() ) )
+			{
+				return item;
+			}
+		}
+
+		return null;
+	}
+
+	private boolean hasReachedRetryTime(ContentReviewItem item) {
+
+		// has the item reached its next retry time?
+		if (item.getNextRetryTime() == null)
+		{
+			item.setNextRetryTime(new Date());
+		}
+
+		if (item.getNextRetryTime().after(new Date())) {
+			//we haven't reached the next retry time
+			log.info("next retry time not yet reached for item: " + item.getId());
+			crqServ.update(item);
+			return false;
+		}
+
+		return true;
+
+	}*/
 }

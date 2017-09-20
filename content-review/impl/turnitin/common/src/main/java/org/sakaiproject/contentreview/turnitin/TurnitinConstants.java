@@ -12,6 +12,11 @@ public class TurnitinConstants
 	
 	public static final String SERVICE_NAME = "Turnitin";
 	
+	// Site property to enable or disable use of Turnitin for the site
+	public static final String TURNITIN_SITE_PROPERTY = "turnitin";
+	
+	public static final String TURNITIN_DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
+	
 	public static final String STEALTHED_LTI_ID = "stealthed_lti_id";
 	public static final String TURNITIN_ASN_ID = "turnitin_asn_id";
 	public static final int PROVIDER_ID = 1;
