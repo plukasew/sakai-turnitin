@@ -47,4 +47,10 @@ public class ContentReviewConstants
 
 	public static final String CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_EXCEEDED = "Error number of retries exceeded";
 	public static final Long CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_EXCEEDED_CODE = new Long(9);
+	
+	// TIITODO: does this belong here or is it something that only affects Turnitin?
+	public static final String SUBMITTED_REPORT_ON_DUE_DATE = "Reports not available until due date";
+	public static final Long SUBMITTED_REPORT_ON_DUE_DATE_CODE = new Long(10);
+	
+	public static final String MSG_REPORT_NOT_AVAILABLE = "Report not available for contentreview_item <%d>, status = %d";
 }

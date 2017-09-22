@@ -1,6 +1,7 @@
 package org.sakaiproject.contentreview.turnitin.dao;
 
 import java.util.Calendar;
+import java.util.List;
 import java.util.Optional;
 import org.hibernate.Criteria;
 import org.hibernate.criterion.Restrictions;
@@ -29,4 +30,18 @@ public class ExtendedContentReviewItemDao extends ContentReviewItemDao
 		
 		return Optional.ofNullable((ContentReviewItem) c.uniqueResult());
 	}
+	
+	// TIITODO: is status 10 (report not available until due date) applicable to all content review providers or just Turnitin?
+	// If so, remove this method and just add status 10 to ContentReviewQueueService.getAwaitingReports()/ContentReviewItemDao method
+	public List<ContentReviewItem> findAwaitingReportsOnDueDate(Integer providerId)
+	{
+		Criteria c = sessionFactory.getCurrentSession()
+				.createCriteria(ContentReviewItem.class)
+				.add(Restrictions.eq(PROVIDER_ID_COL, providerId))
+				.add(Restrictions.isNotNull(EXTERNAL_ID_COL))
+				.add(Restrictions.in(STATUS_COL, new Long[]{ContentReviewConstants.SUBMITTED_REPORT_ON_DUE_DATE_CODE}));
+		
+		return c.list();
+	}
+	
 }
