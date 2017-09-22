@@ -26,6 +26,8 @@
 		<dependency>
 			<groupId>org.sakaiproject.contentreview.turnitin</groupId>
 			<artifactId>content-review-turnitin-impl</artifactId>
+			<version>13-SNAPSHOT</version>
+			<type>pom</type>
 		</dependency>
 		<dependency>
 			<groupId>org.sakaiproject.contentreview.vericite</groupId>

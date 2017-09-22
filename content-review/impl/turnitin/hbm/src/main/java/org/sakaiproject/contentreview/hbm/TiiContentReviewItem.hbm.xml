@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE hibernate-mapping PUBLIC "-//Hibernate/Hibernate Mapping DTD 3.0//EN"
+	"http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
+
+<hibernate-mapping>
+	<class name="org.sakaiproject.turnitin.api.TiiContentReviewItem"
+		table="TII_CONTENT_REVIEW_ITEM">
+
+		<id name="id" column="ID">
+			<generator class="natrive">
+				<param name="sequence">TII_REVIEW_ITEM_SEQ</param>
+			</generator>
+		</id>
+
+		<many-to-one name="contentId" class="org.sakaiproject.contentreview.dao.ContentReviewItem"
+			column="content_id" unique="true" not-null="true" cascade="all" />
+
+		<property name="urlAccessed" type="boolean" insert="true" update="false">
+			<column name="urlAccessed" not-null="true" default="0" />
+		</property>
+		<property name="submissionId" type="string" length="255" not-null="false" />
+		<property name="resubmission" type="boolean">
+			<column name="resubmission" not-null="true" default="0" />
+		</property>
+		<property name="externalGrade" type="string" length="255" not-null="false" />
+
+	</class>
+</hibernate-mapping>

@@ -122,7 +122,7 @@ import org.w3c.dom.NodeList;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.sakaiproject.contentreview.model.TiiActivityConfig;
+import org.sakaiproject.turnitin.api.TiiActivityConfig;
 
 @Slf4j
 // TIITODO: make an interface that exposes the TII-specific methods that need to be called from outside the TII impl
