@@ -11,11 +11,17 @@ public class TiiContentReviewItem
 {
 	private long id;
 	private String contentId;
-	private boolean isUrlAccessed;
+	private boolean urlAccessed;
+	private String submissionId;
+	private boolean resubmission;
+	private String externalGrade;
 	
 	public TiiContentReviewItem(String contentId)
 	{
 		this.contentId = contentId;
-		isUrlAccessed = false;
+		urlAccessed = false;
+		submissionId = null;
+		resubmission = false;
+		externalGrade = null;
 	}
 }
