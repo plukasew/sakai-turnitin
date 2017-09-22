@@ -835,6 +835,7 @@ public abstract class BaseLTIService implements LTIService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public void registerLTIRoleAdvisor(String ltiSiteId, LTIRoleAdvisor advisor)
 	{
 		roleAdvisors.put(ltiSiteId, advisor);
@@ -843,6 +844,7 @@ public abstract class BaseLTIService implements LTIService {
 	/**
 	 * {@inheritDoc}
 	 */
+	@Override
 	public String getLTIRole(String userId, String context, String ltiSiteId)
 	{
 		if (securityService.isSuperUser())
