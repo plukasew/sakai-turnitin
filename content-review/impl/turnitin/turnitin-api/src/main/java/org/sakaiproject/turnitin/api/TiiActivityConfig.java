@@ -1,9 +1,9 @@
-package org.sakaiproject.contentreview.model;
+package org.sakaiproject.turnitin.api;
 
 import java.util.Date;
 
 /**
- * Represents the configuration associating a Sakai activity with a Turnitin LTI instance
+ * Represents Turnitin specific settings for activities that are integrated with Turnitin assignments and configuration required for Turnitin LTI connections
  * @author plukasew, bbailla2
  */
 public class TiiActivityConfig
@@ -23,7 +23,7 @@ public class TiiActivityConfig
 	/** the turnitin assignment id on their servers; assigned to us by their callback */
 	private String turnitinAssignmentId;
 
-	/** 
+	/**
 	 * Represents the latest individual extension date of the assignment. Ie. turnitin will not accept submissions after the close date, 
 	 * so if individual users are given extensions, we have to extend the deadline for the entire assignment. We need to track this.
 	 **/
@@ -51,17 +51,6 @@ public class TiiActivityConfig
 		turnitinAssignmentId = "";
 		latestIndividualExtensionDate = null;
 	}
-
-	// TIITODO: remove this; shouldn't be needed hibernate should auto-magically handle this
-	/*public ContentReviewActivityConfig(Long id, String toolId, String activityId, String stealthedLtiId, String turnitinAssignmentId, Date latestIndividualExtensionDate)
-	{
-		this.id = id;
-		this.toolId = tooLid;
-		this.activityId = activityId;
-		this.stealthedLtiId = stealtheLtiId;
-		this.turnitinAssignmentId = turnitinAssignmentId;
-		this.latestIndividualExtensionDate = latestIndividualExtensionDate;
-	}*/
 
 	public Long getId()
 	{

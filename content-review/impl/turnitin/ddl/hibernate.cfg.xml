@@ -10,5 +10,7 @@
         <mapping resource="org/sakaiproject/contentreview/hbm/ContentReviewItem.hbm.xml" />
         <mapping resource="org/sakaiproject/contentreview/hbm/ContentReviewRosterSyncItem.hbm.xml" />
         <mapping resource="org/sakaiproject/contentreview/hbm/ContentReviewActivityConfigEntry.hbm.xml" />
+        <mapping resource="org/sakaiproject/contentreview/hbm/TiiActivityConfig.hbm.xml" />
+        <mapping resource="org/sakaiproject/contentreview/hbm/TiiContentReviewItem.hbm.xml" />
     </session-factory>
 </hibernate-configuration>

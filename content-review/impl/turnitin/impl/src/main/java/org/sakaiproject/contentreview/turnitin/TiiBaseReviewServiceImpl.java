@@ -60,7 +60,6 @@ import org.sakaiproject.contentreview.dao.ContentReviewItemDao;
 import org.sakaiproject.contentreview.exception.QueueException;
 import org.sakaiproject.contentreview.exception.ReportException;
 import org.sakaiproject.contentreview.exception.SubmissionException;
-import org.sakaiproject.contentreview.model.TiiActivityConfig;
 import org.sakaiproject.contentreview.dao.ContentReviewItem;
 import org.sakaiproject.contentreview.service.ContentReviewService;
 import org.sakaiproject.contentreview.service.ContentReviewQueueService;
@@ -75,6 +74,7 @@ import org.sakaiproject.contentreview.turnitin.util.TurnitinAPIUtil;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinReturnValue;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinLTIUtil;
 import org.sakaiproject.assignment.api.AssignmentService;
+import org.sakaiproject.turnitin.api.TiiActivityConfig;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.Setter;
