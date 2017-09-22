@@ -208,6 +208,7 @@ public interface LTIService {
     String LTI_STATUS = "status";
     String LTI_VISIBLE = "visible";
     String LTI_LAUNCH = "launch";
+	String LTI_LAUNCH_SUFFIX = "launch_suffix";
     String LTI_ALLOWLAUNCH = "allowlaunch";
     String LTI_CONSUMERKEY = "consumerkey";
     String LTI_ALLOWCONSUMERKEY = "allowconsumerkey";
