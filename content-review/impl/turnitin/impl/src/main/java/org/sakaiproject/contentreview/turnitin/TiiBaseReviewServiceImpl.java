@@ -442,7 +442,8 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
 		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
 		{
-			log.debug("Report not available: " + item.getStatus());
+			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
+			log.debug(msg);
 		}
 		
 		// TIITODO: in the original 13.x implementation there is a bunch of grade syncing code here
@@ -530,9 +531,18 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 
 		// check that the report is available
 		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
-		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0) {
-			log.debug("Report not available: " + item.getStatus());
-			throw new ReportException("Report not available: " + item.getStatus());
+		Long status = item.getStatus();
+		if (ContentReviewConstants.SUBMITTED_REPORT_ON_DUE_DATE_CODE.equals(status)
+				|| ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE.equals(status))
+		{
+			log.debug("Report pending for item: " + item.getId());
+			return "Pending"; // TIITODO: constant or better return object
+		}
+		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
+		{
+			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), status);
+			log.debug(msg);
+			throw new ReportException(msg);
 		}
 		
 		return getLTIReportAccess(item);
@@ -569,9 +579,11 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		// turnitin (maybe)
 
 		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
-		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0) {
-			log.debug("Report not available: " + item.getStatus());
-			throw new ReportException("Report not available: " + item.getStatus());
+		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
+		{
+			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
+			log.debug(msg);
+			throw new ReportException(msg);
 		}
 
 		// report is available - generate the URL to display
@@ -617,9 +629,11 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		// turnitin (maybe)
 
 		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
-		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0) {
-			log.debug("Report not available: " + item.getStatus());
-			throw new ReportException("Report not available: " + item.getStatus());
+		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
+		{
+			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
+			log.debug(msg);
+			throw new ReportException(msg);
 		}
 
 
@@ -788,7 +802,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				user = userDirectoryService.getUser(currentItem.getUserId());
 			} catch (UserNotDefinedException e1) {
 				log.error("Submission attempt unsuccessful - User not found.", e1);
-				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE, null, null);
+				processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_NO_RETRY_CODE, "User not found", null);
 				errors++;
 				continue;
 			}
@@ -958,7 +972,19 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 					log.debug("LTI submission successful");
 					//problems overriding this on callback
 					//currentItem.setExternalId(externalId);
-					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
+					
+					// If assignment set to generate reports on due date, set status appropriately
+					// TIITODO: fix this to work with new Assignments API
+					/*if (ac != null && TurnitinConstants.GEN_REPORTS_ON_DUE_DATE_SETTING.equals(ac.getGenerateOriginalityReport()))*/
+					if (false)  // TIITODO: remove when above is fixed
+					{
+						currentItem.setStatus(ContentReviewConstants.SUBMITTED_REPORT_ON_DUE_DATE_CODE);
+					}
+					else
+					{
+						currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
+					}
+					
 					currentItem.setRetryCount(Long.valueOf(0));
 					currentItem.setLastError(null);
 					currentItem.setErrorCode(null);
@@ -1605,7 +1631,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		return ltiReportsUrl;
 	}
 	
-	private String getLTIAccess(TiiActivityConfig activityConfig, String contextId)
+	protected String getLTIAccess(TiiActivityConfig activityConfig, String contextId)
 	{
 		String ltiId = activityConfig.getStealthedLtiId();
 		if (ltiId == null)
@@ -2104,6 +2130,10 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		// For the Sakai API integration, we should never enter the report state with externalId = null
 		List<ContentReviewItem> awaitingReport = crqServ.getAwaitingReports(getProviderId()).stream()
 				.filter(item -> item.getExternalId() != null).collect(Collectors.toList());
+		
+		// Iterate through all items in status 10 (report pending, generated on due date)
+		awaitingReport.addAll(dao.findAwaitingReportsOnDueDate(getProviderId()));
+		
 		Iterator<ContentReviewItem> listIterator = awaitingReport.iterator();
 		HashMap<String, Integer> reportTable = new HashMap<>();
 
@@ -2112,6 +2142,34 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		ContentReviewItem currentItem;
 		while (listIterator.hasNext()) {
 			currentItem = (ContentReviewItem) listIterator.next();
+			
+			org.sakaiproject.assignment.api.model.Assignment assignment;
+			try
+			{
+				assignment = assignmentService.getAssignment(currentItem.getTaskId());
+				if (assignment != null)
+				{
+					// If the assignment is set to generate reports on the due date, and the effective due date is in the future,
+					// skip to next item without incrementing retry count
+					if (ContentReviewConstants.SUBMITTED_REPORT_ON_DUE_DATE_CODE.equals(currentItem.getStatus()))
+					{
+						int dueDateBuffer = serverConfigurationService.getInt("contentreview.due.date.queue.job.buffer.minutes", 0);
+						if (System.currentTimeMillis() < getEffectiveDueDate(currentItem.getTaskId(),
+								assignment.getCloseDate().getTime(), assignment.getProperties(), dueDateBuffer))
+						{
+							continue;
+						}
+					}
+				}
+			}
+			catch (IdUnusedException | PermissionException e)
+			{
+				// If the assignment no longer exists or if there was a permission exception, increment the item's retry count and skip to next item
+				String errorMsg = "Cant get assignment by taskID = " + currentItem.getTaskId() + ", skipping to next item";
+				log.warn(errorMsg, e);
+				incrementRetryCountAndProcessError(currentItem, currentItem.getStatus(), errorMsg, null);
+				continue;
+			}
 
 			// has the item reached its next retry time?
 			if (currentItem.getNextRetryTime() == null)
@@ -2126,13 +2184,27 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				continue;
 			}
 
-			if (currentItem.getRetryCount() == null ) {
+			if (currentItem.getRetryCount() == null )
+			{
 				currentItem.setRetryCount(Long.valueOf(0));
 				currentItem.setNextRetryTime(this.getNextRetryTime(0));
-			} else if (currentItem.getRetryCount().intValue() > maxRetry) {
+			}
+			else if (currentItem.getRetryCount().intValue() > maxRetry)
+			{
 				processError( currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_EXCEEDED_CODE, null, null );
 				continue;
-			} else {
+			}
+			else
+			{
+				// If associated assignment does not have content review enabled, increment the item's retry count and skip to next item
+				if (assignment != null && !assignment.getContentReview())
+				{
+					String errorMsg = "Assignment with ID = " + currentItem.getTaskId() + " does not have content review enabled; skipping to next item";
+					log.warn(errorMsg);
+					incrementRetryCountAndProcessError(currentItem, currentItem.getStatus(), errorMsg, null);
+					continue;
+				}
+				
 				log.debug("Still have retries left, continuing. ItemID: " + currentItem.getId());
 			}
 
@@ -2167,7 +2239,9 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				String paperId = currentItem.getExternalId();
 
 				if(paperId == null){
-					log.warn("Could not find TII paper id for the content " + currentItem.getContentId());
+					String errorMsg = "Could not find TII paper id for the content " + currentItem.getContentId();
+					log.warn(errorMsg);
+					incrementRetryCountAndProcessError(currentItem, currentItem.getStatus(), errorMsg, null);
 					long l = currentItem.getRetryCount();
 					l++;
 					currentItem.setRetryCount(l);
@@ -2204,20 +2278,25 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 					log.debug("new report received: " + paperId + " -> " + currentItem.getReviewScore());
 				} else {
 					if(result.getResult() == -7){
-						log.debug("report is still pending for paper " + paperId);
-						currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
-						currentItem.setLastError( result.getErrorMessage() );
-						currentItem.setErrorCode( result.getResult() );
+							// If assignment set to generate reports on due date, set status appropriately
+							String errorMsg = "";
+							// TIITODO: fix this so it works with the new Assignments API or TiiActivityConfig, depending on what we decide
+							/*if(assignmentContent != null && TurnitinConstants.GEN_REPORTS_ON_DUE_DATE_SETTING.equals(
+									assignmentContent.getGenerateOriginalityReport())) {
+								currentItem.setStatus(ContentReviewConstants.SUBMITTED_REPORT_ON_DUE_DATE_CODE);
+								errorMsg = "Report is still pending for paper " + paperId + "; will be generated on due date";
+							} else {
+								currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
+								errorMsg = "Report is still pending for paper " + paperId;
+							}*/
+
+							log.debug(errorMsg);
+							processError(currentItem, currentItem.getStatus(), result.getErrorMessage(), result.getResult());
 					} else {
-						log.error("Error making LTI call");
-						long l = currentItem.getRetryCount();
-						l++;
-						currentItem.setRetryCount(l);
-						currentItem.setNextRetryTime(this.getNextRetryTime(l));
-						currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE);
-						currentItem.setLastError("Report Data Error: " + result.getResult());
+							String errorMsg = "Error making LTI call; report data error: " + result.getResult();
+							log.error(errorMsg);
+							incrementRetryCountAndProcessError(currentItem, ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE, errorMsg, null);
 					}
-					crqServ.update(currentItem);
 				}
 
 				continue;
@@ -2292,20 +2371,13 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 							log.info("Report generate speed is 2, skipping for now. ItemID: " + currentItem.getId());
 							// If there was previously a transient error for this item, reset the status
 							if (ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE.equals(currentItem.getStatus())) {
-								currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE);
-								currentItem.setLastError(null);
-								currentItem.setErrorCode(null);
-								crqServ.update(currentItem);
+								processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE, null, null);
 							}
 							continue;
 						}
 						else {
 							log.debug("Incrementing retry count for currentItem: " + currentItem.getId());
-							long l = currentItem.getRetryCount();
-							l++;
-							currentItem.setRetryCount(l);
-							currentItem.setNextRetryTime(this.getNextRetryTime(l));
-							crqServ.update(currentItem);
+							incrementRetryCountAndProcessError(currentItem, currentItem.getStatus(), null, null);
 						}
 					}
 				} catch (SubmissionException | TransientSubmissionException e) {
@@ -2331,16 +2403,12 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				}
 				catch (TransientSubmissionException e) {
 					log.warn("Update failed due to TransientSubmissionException error: " + e.toString(), e);
-					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE);
-					currentItem.setLastError(e.getMessage());
-					crqServ.update(currentItem);
+					processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE, e.getMessage(), null);
 					break;
 				}
 				catch (SubmissionException e) {
 					log.warn("Update failed due to SubmissionException error: " + e.toString(), e);
-					currentItem.setStatus(ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE);
-					currentItem.setLastError(e.getMessage());
-					crqServ.update(currentItem);
+					processError(currentItem, ContentReviewConstants.CONTENT_REVIEW_REPORT_ERROR_RETRY_CODE, e.getMessage(), null);
 					break;
 				}
 
@@ -3109,7 +3177,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		}
 	}
 	
-	private boolean updateItemAccess(String contentId)
+	protected boolean updateItemAccess(String contentId)
 	{
 		//return dao.updateIsUrlAccessed( contentId, true );
 		// TIITODO: implement above using TiiContentReviewItemDao or equivalent
@@ -3306,7 +3374,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
         return resources;
 	}
 	
-	private boolean isAcceptableSize(ContentResource resource)
+	protected boolean isAcceptableSize(ContentResource resource)
 	{
 		return turnitinContentValidator.isAcceptableSize(resource);
 	}
@@ -3425,6 +3493,53 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			log.debug("Assignment creation failed with message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
 			throw new SubmissionException("Create Assignment not successful. Message: " + ((CharacterData) (root.getElementsByTagName("rmessage").item(0).getFirstChild())).getData().trim() + ". Code: " + rcode);
 		}
+	}
+	
+	protected long getEffectiveDueDate(String assignmentID, long assignmentDueDate, Map<String, String> assignmentProperties, int dueDateBuffer)
+	{
+		long dueDateMillis = assignmentDueDate;
+		if (assignmentProperties != null ) {
+			// TIITODO: update this call so it works with the new Assignments API, and remove the temp line below it
+			//String strResubmitCloseTime = assignmentProperties.getProperty(AssignmentSubmission.ALLOW_RESUBMIT_CLOSETIME);
+			String strResubmitCloseTime = "";
+			if (!StringUtils.isBlank(strResubmitCloseTime)) {
+				try {
+					// If the resubmit close time is after the close time, it effectively becomes the due date (on the TII side)
+					long resubmitCloseTime = Long.parseLong(strResubmitCloseTime);
+					if (resubmitCloseTime > dueDateMillis) {
+						dueDateMillis = resubmitCloseTime;
+					}
+				} catch (NumberFormatException ex) {
+					log.warn("NumberFormatException thrown when parsing the resubmitCloseTime: " + strResubmitCloseTime);
+				}
+			}
+		}
+
+		// If we've previously saved the date for a manually allowed student resubmission (extension), and it's after the previously
+		// determined effective due date, the extension then becomes the effective due date
+		// TIITODO: remove commented out line below once the new activity config is working
+		/*String strLatestExtensionDate = getActivityConfigValue( TurnitinConstants.TURNITIN_ASN_LATEST_INDIVIDUAL_EXTENSION_DATE,
+														 TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentID,
+														 TurnitinConstants.PROVIDER_ID );*/
+		long latestExtensionDate = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentID)
+				.map(cfg -> cfg.getLatestIndividualExtensionDate().getTime()).orElse(0L);
+
+		if (latestExtensionDate > dueDateMillis) {
+			dueDateMillis = latestExtensionDate;
+		}
+
+		// Push the due date by the necessary padding
+		dueDateMillis += dueDateBuffer * 60000; // TIITODO: constant/sakai.property?
+		return dueDateMillis;
+	}
+	
+	private void incrementRetryCountAndProcessError(ContentReviewItem item, Long status, String error, Integer errorCode)
+	{
+		long l = item.getRetryCount();
+		l++;
+		item.setRetryCount(l);
+		item.setNextRetryTime(getNextRetryTime(l));
+		processError(item, status, error, errorCode);
 	}
 	
 	/*

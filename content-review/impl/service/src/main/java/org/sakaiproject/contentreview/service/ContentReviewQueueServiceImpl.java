@@ -96,12 +96,14 @@ public class ContentReviewQueueServiceImpl implements ContentReviewQueueService 
 		}
 		
 		ContentReviewItem item = matchingItem.get();
-		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0) {
-			log.debug("Report not available: " + item.getStatus());
-			throw new ReportException("Report not available: " + item.getStatus());
+		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
+		{
+			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
+			log.debug(msg);
+			throw new ReportException(msg);
 		}
 		
-		return item.getReviewScore().intValue();
+		return item.getReviewScore();
 	}
 
 	/* (non-Javadoc)
