@@ -20,98 +20,29 @@
  **********************************************************************************/
 package org.sakaiproject.contentreview.turnitin;
 
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.URLDecoder;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.time.DateTimeException;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Calendar;
-import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
-import java.util.SortedSet;
-import java.util.TreeSet;
-
-import org.apache.commons.lang.ArrayUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.commons.validator.EmailValidator;
-import org.tsugi.basiclti.BasicLTIConstants;
-import org.sakaiproject.api.common.edu.person.SakaiPerson;
-import org.sakaiproject.api.common.edu.person.SakaiPersonManager;
-// import org.sakaiproject.assignment.api.AssignmentContent; (removed)
-import org.sakaiproject.assignment.api.AssignmentService;
-import org.sakaiproject.assignment.api.model.AssignmentSubmission;
 import org.sakaiproject.authz.api.SecurityAdvisor;
-import org.sakaiproject.authz.api.SecurityService;
-import org.sakaiproject.component.api.ServerConfigurationService;
 import org.sakaiproject.component.cover.ComponentManager;
-import org.sakaiproject.content.api.ContentHostingService;
 import org.sakaiproject.content.api.ContentResource;
-//import org.sakaiproject.contentreview.dao.impl.ContentReviewDao; Use TiiContentReviewItemDao and TiiContentReviewRosterSyncDao
-import org.sakaiproject.contentreview.exception.QueueException;
-import org.sakaiproject.contentreview.exception.ReportException;
 import org.sakaiproject.contentreview.exception.SubmissionException;
 import org.sakaiproject.contentreview.exception.TransientSubmissionException;
-//import org.sakaiproject.contentreview.impl.hbm.TiiBaseReviewServiceImpl;
-import org.sakaiproject.contentreview.turnitin.TiiBaseReviewServiceImpl;
-//import org.sakaiproject.contentreview.model.ContentReviewItem;
 import org.sakaiproject.contentreview.dao.ContentReviewItem;
-import org.sakaiproject.db.api.SqlReader;
-import org.sakaiproject.db.api.SqlService;
-import org.sakaiproject.entity.api.Entity;
-import org.sakaiproject.entity.api.EntityManager;
-import org.sakaiproject.entity.api.EntityProducer;
-import org.sakaiproject.entity.api.Reference;
-import org.sakaiproject.entity.api.ResourceProperties;
-import org.sakaiproject.entity.api.ResourcePropertiesEdit;
-import org.sakaiproject.entitybroker.EntityReference;
 import org.sakaiproject.exception.IdUnusedException;
 import org.sakaiproject.exception.PermissionException;
-import org.sakaiproject.exception.TypeException;
-import org.sakaiproject.genericdao.api.search.Restriction;
-import org.sakaiproject.genericdao.api.search.Search;
-import org.sakaiproject.lti.api.LTIService;
 import org.sakaiproject.service.gradebook.shared.AssessmentNotFoundException;
 import org.sakaiproject.service.gradebook.shared.GradebookExternalAssessmentService;
 import org.sakaiproject.service.gradebook.shared.GradebookService;
 import org.sakaiproject.service.gradebook.shared.GradebookNotFoundException;
 import org.sakaiproject.site.api.Site;
-import org.sakaiproject.site.api.SiteService;
 import org.sakaiproject.service.gradebook.shared.Assignment;
 import org.sakaiproject.tool.api.Session;
-import org.sakaiproject.tool.api.SessionManager;
-//import org.sakaiproject.turnitin.util.TurnitinAPIUtil;
-//import org.sakaiproject.turnitin.util.TurnitinLTIUtil;
-//import org.sakaiproject.turnitin.util.TurnitinReturnValue;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinAPIUtil;
-import org.sakaiproject.contentreview.turnitin.util.TurnitinLTIUtil;
-import org.sakaiproject.contentreview.turnitin.util.TurnitinReturnValue;
-import org.sakaiproject.user.api.PreferencesService;
 import org.sakaiproject.user.api.User;
-import org.sakaiproject.user.api.UserDirectoryService;
 import org.sakaiproject.user.api.UserNotDefinedException;
 import org.sakaiproject.util.ResourceLoader;
 import org.w3c.dom.CharacterData;
@@ -123,11 +54,12 @@ import org.w3c.dom.NodeList;
 import lombok.extern.slf4j.Slf4j;
 
 import org.sakaiproject.turnitin.api.TiiActivityConfig;
+import org.sakaiproject.contentreview.service.TurnitinExtendedContentReviewService;
 
 @Slf4j
 // TIITODO: make an interface that exposes the TII-specific methods that need to be called from outside the TII impl
 // If we design this right, it is possible this may not be required to be put in the public ContentReview API at all
-public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
+public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implements TurnitinExtendedContentReviewService
 {
 
 	final static long LOCK_PERIOD = 12000000;
@@ -145,7 +77,9 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 	 * here
 	 */
 	@Override
-	public void init() {
+	public void init()
+	{
+		super.init();
 		
 		// TIITODO: remove this method since the base class has it already?
 
@@ -154,8 +88,61 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		}
 	}
 	
+	@Override
+	public boolean isAcceptableSize(ContentResource resource)
+	{
+		return super.isAcceptableSize(resource);
+	}
+	
+	@Override
+	public boolean isDirectAccess(Site s) {
+		if (s == null) {
+			return false;
+		}
+
+		log.debug("isDirectAccess: " + s.getId() + " / " + s.getTitle());
+		// Delegated to another bean
+		
+		return siteAdvisor != null && siteAdvisor.siteCanUseReviewService(s) && siteAdvisor.siteCanUseLTIReviewService(s) && siteAdvisor.siteCanUseLTIDirectSubmission(s);
+	}
+	
+	@Override
+	public boolean isDirectAccess(Site s, Date assignmentCreationDate)
+	{
+		if (s == null || siteAdvisor == null)
+		{
+			return false;
+		}
+		
+		return siteAdvisor.siteCanUseReviewService(s) && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, assignmentCreationDate)
+				&& siteAdvisor.siteCanUseLTIDirectSubmission(s);
+	}
+	
+	@Override
+	public boolean allowMultipleAttachments()
+	{
+		return serverConfigurationService.getBoolean("turnitin.allow.multiple.attachments", false);
+	}
+	
+	/**
+	 * @inheritDoc
+	 */
+	@Override
+	public void offerIndividualExtension(String siteId, String asnId, Map<String, Object> extraAsnOpts, Date extensionDate) throws SubmissionException, TransientSubmissionException
+	{
+		syncAssignment(siteId, asnId, extraAsnOpts, extensionDate);
+	}
+	
+	@Override
+	public String getLTIAccess(String taskId, String siteId)
+	{
+		return getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId)
+				.map(cfg -> super.getLTIAccess(cfg, siteId)).orElse("");
+	}
+	
 	// TIITODO ensure this is invoked when an assignment is deleted
 	// TIITODO: consider if a general cleanup method in the CRS API is appropriate. This deletion work could be done there if so.
+	@Override
 	public boolean deleteLTITool(String taskId, String contentId) {
 		SecurityAdvisor advisor = new SimpleSecurityAdvisor(sessionManager.getCurrentSessionUserId(), "site.upd", "/site/!admin");
 
@@ -180,9 +167,16 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		}
 		return false;
  	}
+		
+	@Override
+	public boolean updateItemAccess(String contentId)
+	{
+		return super.updateItemAccess(contentId);
+	}
 	
 	// TIITODO: externalId is a part of the ContentReviewItem already, should this method just be added to CRS API, 
 	// even though Turnitin is the only implementation that updates it?
+	@Override
 	public boolean updateExternalId(String contentId, String externalId)
 	{
 		dao.findByProviderAndContentId(getProviderId(), contentId)
@@ -195,6 +189,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		return true;
 	}
 		
+	@Override
 	public boolean updateExternalGrade(String contentId, String score)
 	{
 		// TIITODO: does externalGrade belong in ContentReviewItem or TiiContentReviewItem?
@@ -208,6 +203,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		return false;
 	}
 	
+	@Override
 	public Optional<String> getExternalGradeForContentId(String contentId)
 	{
 		// TIITODO: see comment in method above and implement as appropriate
@@ -219,55 +215,83 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		return Optional.empty();
 	}
 	
-	public boolean isDirectAccess(Site s) {
-		if (s == null) {
+	@Override
+	public String getLocalizedInvalidAsnConfigError()
+	{
+		ResourceLoader rl = new ResourceLoader(userDirectoryService.getCurrentUser().getId(), "turnitin");
+		
+		return rl.getString("invalid_asn_config");
+	}
+
+	@Override
+	public boolean validateActivityConfiguration(String toolId, String activityId)
+	{
+		// if new integration, check for the turnitin assignment id and the stealthed lti id
+		boolean useLTI;
+		try
+		{
+			// assume we're always in assignments since this is just a temporary check until
+			// we remove the legacy integration
+			org.sakaiproject.assignment.api.model.Assignment asn = assignmentService.getAssignment(activityId);
+			Site site = siteService.getSite(asn.getContext());
+			useLTI = siteAdvisor.siteCanUseLTIReviewServiceForAssignment(site, new Date(asn.getDateCreated().getTime()));
+		}
+		catch (IdUnusedException | PermissionException e)
+		{
+			log.debug("Unable to find Assignment for the given activity id (" + activityId + ")", e);
 			return false;
 		}
 
-		log.debug("isDirectAccess: " + s.getId() + " / " + s.getTitle());
-		// Delegated to another bean
-		
-		return siteAdvisor != null && siteAdvisor.siteCanUseReviewService(s) && siteAdvisor.siteCanUseLTIReviewService(s) && siteAdvisor.siteCanUseLTIDirectSubmission(s);
+		return !useLTI || getActivityConfig(toolId, activityId)
+				.map(cfg -> !cfg.getTurnitinAsssignmentId().isEmpty() && !cfg.getStealthedLtiId().isEmpty())
+				.orElse(false);
 	}
 	
-	public boolean isDirectAccess(Site s, Date assignmentCreationDate)
+	@Override
+	public long getEffectiveDueDate(String assignmentID, long assignmentDueDate, Map<String, String> assignmentProperties, int dueDateBuffer)
 	{
-		if (s == null || siteAdvisor == null)
-		{
-			return false;
+		return super.getEffectiveDueDate(assignmentID, assignmentDueDate, assignmentProperties, dueDateBuffer);
+	}
+
+	@Override
+	public void updatePendingStatusForAssignment(String assignmentRef, String generateReportsSetting)
+	{
+		// TIITODO: implement this, probably in ContentReviewQueueService/ContentReviewItemDao
+		// Unless we decide that generating reports on due date is a Turnitin-only property...
+		/*List<ContentReviewItem> toUpdate;
+		Long newStatus;
+		if (TurnitinConstants.GEN_REPORTS_ON_DUE_DATE_SETTING.equals(generateReportsSetting)) {
+			toUpdate = dao.findByProperties(ContentReviewItem.class,
+				new String[] { "taskId", "status" },
+				new Object[] { assignmentRef, ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE },
+				new int[] { dao.EQUALS, dao.EQUALS });
+			newStatus = ContentReviewItem.SUBMITTED_REPORT_ON_DUE_DATE_CODE;
+		} else {
+			toUpdate = dao.findByProperties(ContentReviewItem.class,
+				new String[] { "taskId", "status" },
+				new Object[] { assignmentRef, ContentReviewItem.SUBMITTED_REPORT_ON_DUE_DATE_CODE },
+				new int[] { dao.EQUALS, dao.EQUALS });
+			newStatus = ContentReviewItem.SUBMITTED_AWAITING_REPORT_CODE;
 		}
-		
-		return siteAdvisor.siteCanUseReviewService(s) && siteAdvisor.siteCanUseLTIReviewServiceForAssignment(s, assignmentCreationDate)
-				&& siteAdvisor.siteCanUseLTIDirectSubmission(s);
+
+		for (ContentReviewItem item : toUpdate) {
+			item.setStatus(newStatus);
+			dao.update(item);
+		}*/
 	}
+	
+	/* -------------------- END TURNITIN EXTENDED CONTENT REVIEW SERVICE API METHODS ------------------------ */
+	/*                                                                                                        */
+	/* ------------------------------ PRIVATE / PROTECTED only below this line ------------------------------ */
 
-	public boolean allowMultipleAttachments()
-	{
-		return serverConfigurationService.getBoolean("turnitin.allow.multiple.attachments", false);
-	}
-
-    /**
-    * Get additional data from String if available
-    * @return array containing site ID, Task ID, Task Title
-    */
-    private String[] getAssignData(String data){
-        String[] assignData = null;
-        try{
-            if(data.contains("#")){
-                assignData = data.split("#");
-            }
-        }catch(Exception e){
-        }
-        return assignData;
-    }
-
-    public String getInlineTextId(String assignmentReference, String userId, long submissionTime){
+	// TIITODO: can we just delete these?
+    /*public String getInlineTextId(String assignmentReference, String userId, long submissionTime){
 	return "";
     } 	
 
     public boolean acceptInlineAndMultipleAttachments(){
 	return false;
-    }
+    }*/
 
 	/**
 	 * Check if grade sync has been run already for the specified site
@@ -275,7 +299,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 	 * @param taskId
 	 * @return
 	 */
-	public boolean gradesChecked(Session sess, String taskId){
+	private boolean gradesChecked(Session sess, String taskId){
 		String sessSync;
 		try{
 			sessSync = sess.getAttribute("sync").toString();
@@ -294,7 +318,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
     * @param userId User ID
     * @return true if user has student role on the site.
     */
-	public boolean isUserStudent(String  siteId, String userId){
+	private boolean isUserStudent(String  siteId, String userId){
 		boolean isStudent=false;
 		try{
 					Set<String> studentIds = siteService.getSite(siteId).getUsersIsAllowed("section.role.student");
@@ -316,35 +340,38 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
     * @param data Map containing Site/Assignment IDs
     * @return Associated gradebook item
     */
-        public Assignment getAssociatedGbItem(Map data){
-            Assignment assignment = null;
-            String taskId = data.get("taskId").toString();
-            String siteId = data.get("siteId").toString();
-            String taskTitle = data.get("taskTitle").toString();
+	private Assignment getAssociatedGbItem(Map data){
+		Assignment assignment = null;
+		String taskId = data.get("taskId").toString();
+		String siteId = data.get("siteId").toString();
+		String taskTitle = data.get("taskTitle").toString();
 
-            pushAdvisor();
-            try {
-                List<Assignment> allGbItems = gradebookService.getAssignments(siteId);
-                for (Assignment assign : allGbItems) {
-                        //Match based on External ID / Assignment title
-                        if(taskId.equals(assign.getExternalId()) || assign.getName().equals(taskTitle) ){
-                            assignment = assign;
-                            break;
-                        }
-                }
-            } catch (Exception e) {
-                    log.error("(allGbItems)"+e.toString());
-            } finally{
-                popAdvisor();
-            }
-            return assignment;
-        }
+		pushAdvisor();
+		try {
+			List<Assignment> allGbItems = gradebookService.getAssignments(siteId);
+			for (Assignment assign : allGbItems) {
+					//Match based on External ID / Assignment title
+					if(taskId.equals(assign.getExternalId()) || assign.getName().equals(taskTitle) ){
+						assignment = assign;
+						break;
+					}
+			}
+		} catch (Exception e) {
+				log.error("(allGbItems)"+e.toString());
+		} finally{
+			popAdvisor();
+		}
+		return assignment;
+	}
 
-        /**
+	// TIITODO: making this private for now but we probably need to keep it for grademark support.
+	// Re-evaluate later. See also getReviewScore() in TiiBaseReviewServiceImpl. Consider moving all
+	// grade sync code to a delegate class.
+    /**
     * Check Turnitin for grades and write them to the associated gradebook
     * @param data Map containing relevant IDs (site ID, Assignment ID, Title)
     */
-	public void syncGrades(Map<String,Object>data)
+	private void syncGrades(Map<String,Object>data)
 	{
 		//Get session and check if gardes have already been synced
 		Session sess = sessionManager.getCurrentSession();
@@ -440,7 +467,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
     * @param assignment
     * @return
     */
-    public String processGrade(String grade,Assignment assignment){
+    private String processGrade(String grade,Assignment assignment){
         String processedGrade="";
         try{
             int gradeVal = Integer.parseInt(grade);
@@ -469,7 +496,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
      * @param enrollmentInfo
      * @return
      */
-    public boolean writeGrade(Assignment assignment, Map<String,Object> data, HashMap reportTable,HashMap additionalData,Map enrollmentInfo){
+    private boolean writeGrade(Assignment assignment, Map<String,Object> data, HashMap reportTable,HashMap additionalData,Map enrollmentInfo){
             boolean success = false;
             String grade;
             String siteId = data.get("siteId").toString();
@@ -521,7 +548,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
    * @param siteId Site ID
    * @return Map containing Students turnitin / Sakai ID
    */
-	public Map getAllEnrollmentInfo(String siteId){
+	private Map getAllEnrollmentInfo(String siteId){
 			Map<String,String> enrollmentInfo=new HashMap();
 			String tiiExternalId;//the ID sakai stores
 			String tiiInternalId;//Turnitin internal ID
@@ -565,40 +592,34 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 			return enrollmentInfo;
 	}
 
-	 public void pushAdvisor() {
+	private void pushAdvisor() {
 			securityService.pushAdvisor(new SecurityAdvisor() {
 
+					@Override
 					public SecurityAdvisor.SecurityAdvice isAllowed(String userId, String function,
 							String reference) {
 							return SecurityAdvisor.SecurityAdvice.ALLOWED;
 					}
 			});
 	}
-	public void popAdvisor() {
+	private void popAdvisor() {
 			securityService.popAdvisor();
 	}
 
 
+	// TIITODO: can we remove this? Nothing seems to call it...
 	/**
 	 * @param siteId
 	 * @param taskId
 	 * @throws SubmissionException
 	 * @throws TransientSubmissionException
 	 */
-	public void createAssignment(String siteId, String taskId) throws SubmissionException, TransientSubmissionException {
+	/*public void createAssignment(String siteId, String taskId) throws SubmissionException, TransientSubmissionException {
 		createAssignment(siteId, taskId, null);
-	}
+	}*/
 
-	/**
-	 * @inheritDoc
-	 */
-	public void offerIndividualExtension(String siteId, String asnId, Map<String, Object> extraAsnOpts, Date extensionDate) throws SubmissionException, TransientSubmissionException
-	{
-		syncAssignment(siteId, asnId, extraAsnOpts, extensionDate);
-	}
 	
-	// TIITODO: 13.x doesn't seem to use this explicit locking methods. Can we remove them?
-
+	// TIITODO: 13.x doesn't seem to use these explicit locking methods. Can we remove them?
 	/*
 	 * Obtain a lock on the item
 	 */
@@ -612,11 +633,9 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 		/*dao.releaseLock("item." + currentItem.getId().toString(), serverConfigurationService.getServerId());*/
 	}
 
-	
-	
 
 	@SuppressWarnings("unchecked")
-	public Map getInstructorInfo(String siteId, boolean ignoreUseSource) {
+	private Map getInstructorInfo(String siteId, boolean ignoreUseSource) {
 		Map togo = new HashMap();
 		if (!turnitinConn.isUseSourceParameter() && ignoreUseSource == false ) {
 			togo.put("uem", turnitinConn.getDefaultInstructorEmail());
@@ -770,37 +789,5 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl
 			
 		}
 	}*/
-
-	public boolean validateActivityConfiguration(String toolId, String activityId)
-	{
-		// if new integration, check for the turnitin assignment id and the stealthed lti id
-		boolean useLTI;
-		try
-		{
-			// assume we're always in assignments since this is just a temporary check until
-			// we remove the legacy integration
-			org.sakaiproject.assignment.api.model.Assignment asn = assignmentService.getAssignment(activityId);
-			Site site = siteService.getSite(asn.getContext());
-			useLTI = siteAdvisor.siteCanUseLTIReviewServiceForAssignment(site, new Date(asn.getDateCreated().getTime()));
-		}
-		catch (IdUnusedException | PermissionException e)
-		{
-			log.debug("Unable to find Assignment for the given activity id (" + activityId + ")", e);
-			return false;
-		}
-
-		return !useLTI || getActivityConfig(toolId, activityId)
-				.map(cfg -> !cfg.getTurnitinAsssignmentId().isEmpty() && !cfg.getStealthedLtiId().isEmpty())
-				.orElse(false);
-	}
-
-	public String getLocalizedInvalidAsnConfigError()
-	{
-		ResourceLoader rl = new ResourceLoader(userDirectoryService.getCurrentUser().getId(), "turnitin");
-		
-		return rl.getString("invalid_asn_config");
-	}
-
-
-
+	
 }

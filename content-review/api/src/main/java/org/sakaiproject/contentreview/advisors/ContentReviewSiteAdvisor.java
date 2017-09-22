@@ -21,10 +21,14 @@ import org.sakaiproject.site.api.Site;
 public interface ContentReviewSiteAdvisor {
 
 	public boolean siteCanUseReviewService(Site site);
+	
+	// TIITODO: methods below this line are TII-specific and need to be moved to a more appropriate class...
+	// -----------------------------------------------------------------------------------------------------
 
 	public boolean siteCanUseLTIReviewService(Site site);
 
-	// TIITODO: can this be removed now?
+	// TIITODO: can this be removed now? Can we set a flag on the assignment on creation instead?
+	// Will that work when editing assignments? With assignments that have existing submissions?
 	/**
 	 * Returns true if the TII LTI review service should be used, given the
 	 * assignment creation date. This is a transitional method that should be removed
