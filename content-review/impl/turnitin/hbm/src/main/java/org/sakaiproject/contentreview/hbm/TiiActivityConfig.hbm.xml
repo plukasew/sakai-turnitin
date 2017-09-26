@@ -3,19 +3,60 @@
 	"http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd">
 
 <hibernate-mapping>
-	<class name="org.sakaiproject.turnitin.api.TiiActivityConfig"
+	<class name="org.sakaiproject.turnitin.api.TiiInternalActivityConfig"
 		table="TII_ACTIVITY_CONFIG">
 
-		<id name="id" type="long">
+		<id name="id" column="ID" type="long">
 			<generator class="native">
 				<param name="sequence">TII_ACTIVITY_CONFIG_SEQ</param>
 			</generator>
 		</id>
 
-		<property name="toolId" type="string" length="255" not-null="true"/>
-		<property name="activityId" type="string" length="255" not-null="true" index="turnitin_activityId"/>
-		<property name="stealthedLtiId" type="string" length="255" not-null="true"/>
-		<property name="turnitinAssignmentId" type="string" length="255" not-null="false"/>
-		<property name="lastestIndividualExtensionDate" type="java.util.Date" not-null="false"/>
+		<property name="toolId" column="TOOL_ID" type="string" length="255" not-null="true"/>
+		<property name="activityId" column="ACTIVITY_ID" type="string" length="255" not-null="true" index="turnitin_activityId"/>
+		<property name="stealthedLtiId" column="STEALTHED_LTI_ID" type="string" length="255" not-null="true"/>
+		<property name="turnitinAssignmentId" column="TII_ASSIGNMENT_ID" type="string" length="255" not-null="false"/>
+		<property name="latestIndividualExtensionDate" column="LATEST_EXTENSION_DATE" type="java.util.Date" not-null="false"/>
+		<property name="allowAnyFile" type="boolean">
+			<column name="ALLOW_ANY_FILE" not-null="true" default="0"/>
+		</property>
+		<property name="allowStudentViewExternalGrade" type="boolean">
+			<column name="ALLOW_STUDENT_VIEW_EXT_GRADE" not-null="true" default="0"/>
+		</property>
+
+		<property name="paperRepository" column="PAPER_REPOSITORY" not-null="true">
+			<type name="org.hibernate.type.EnumType">
+				<param name="enumClass">org.sakaiproject.turnitin.api.TiiActivityConfig.PaperRepository</param>
+				<param name="type">12</param>
+			</type>
+		</property>
+
+		<property name="checkTiiPaperRepository" type="boolean">
+			<column name="CHECK_TII_PAPER_REPOSITORY" not-null="true" default="1"/>
+		</property>
+		<property name="checkCurrentAndArchived" type="boolean">
+			<column name="CHECK_CURRENT_AND_ARCHIVED" not-null="true" default="1"/>
+		</property>
+		<property name="checkPeriodicalsJournalsPublications" type="boolean">
+			<column name="CHECK_PUBLICATIONS" not-null="true" default="1"/>
+		</property>
+		<property name="excludeBibliographic" type="boolean">
+			<column name="EXCLUDE_BIBLIOGRAPHIC" not-null="true" default="1"/>
+		</property>
+		<property name="excludeQuoted" type="boolean">
+			<column name="EXCLUDE_QUOTED" not-null="true" default="1"/>
+		</property>
+		<property name="excludeSmallMatches" type="boolean">
+			<column name="EXCLUDE_SMALL" not-null="true" default="0"/>
+		</property>
+
+		<property name="smallMatchType" column="SMALL_MATCH_TYPE" not-null="true">
+			<type name="org.hibernate.type.EnumType">
+				<param name="enumClass">org.skaiproject.turnitin.api.TiiActivityConfig.SmallMatchType</param>
+				<param name="type">12</param>
+			</type>
+		</property>
+
+		<property name="smallMatchValue" type="integer" column="SMALL_MATCH_VALUE" not-null="true" default="-1" />
 	</class>
 </hibernate-mapping>

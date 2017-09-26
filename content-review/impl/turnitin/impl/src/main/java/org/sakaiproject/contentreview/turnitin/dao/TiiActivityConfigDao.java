@@ -5,18 +5,18 @@ import java.util.Optional;
 import org.hibernate.Criteria;
 import org.hibernate.criterion.Restrictions;
 import org.sakaiproject.contentreview.dao.HibernateCommonDao;
-import org.sakaiproject.turnitin.api.TiiActivityConfig;
+import org.sakaiproject.turnitin.api.TiiInternalActivityConfig;
 
-public class TiiActivityConfigDao extends HibernateCommonDao<TiiActivityConfig>
+public class TiiActivityConfigDao extends HibernateCommonDao<TiiInternalActivityConfig>
 {
 	private static final String TOOL_ID_COL = "toolId";
 	private static final String ACTIVITY_ID_COL = "activityId";
-	public Optional<TiiActivityConfig> findByToolIdActivityId(String toolId, String activityId)
+	public Optional<TiiInternalActivityConfig> findByToolIdActivityId(String toolId, String activityId)
 	{
-		Criteria c = sessionFactory.getCurrentSession().createCriteria(TiiActivityConfig.class)
+		Criteria c = sessionFactory.getCurrentSession().createCriteria(TiiInternalActivityConfig.class)
 				.add(Restrictions.eq(TOOL_ID_COL, toolId)).add(Restrictions.eq(ACTIVITY_ID_COL, activityId));
 
-		return Optional.ofNullable((TiiActivityConfig) c.uniqueResult());
+		return Optional.ofNullable((TiiInternalActivityConfig) c.uniqueResult());
 	}
 
 	/**
@@ -26,10 +26,10 @@ public class TiiActivityConfigDao extends HibernateCommonDao<TiiActivityConfig>
 	 */
 	public boolean updateTurnitinAssignmentId(String toolId, String activityId, String tiiAssignmentId)
 	{
-		Optional<TiiActivityConfig> optActivityConfig = findByToolIdActivityId(toolId, activityId);
+		Optional<TiiInternalActivityConfig> optActivityConfig = findByToolIdActivityId(toolId, activityId);
 		if (optActivityConfig.isPresent())
 		{
-			TiiActivityConfig activityConfig = optActivityConfig.get();
+			TiiInternalActivityConfig activityConfig = optActivityConfig.get();
 			activityConfig.setTurnitinAssignmentId(tiiAssignmentId);
 			save(activityConfig);
 			return true;
@@ -45,10 +45,10 @@ public class TiiActivityConfigDao extends HibernateCommonDao<TiiActivityConfig>
 	 */
 	public boolean updateLatestIndividualExtensionDate(String toolId, String activityId, Date latestIndividualExtensionDate)
 	{
-		Optional<TiiActivityConfig> optActivityConfig = findByToolIdActivityId(toolId, activityId);
+		Optional<TiiInternalActivityConfig> optActivityConfig = findByToolIdActivityId(toolId, activityId);
 		if (optActivityConfig.isPresent())
 		{
-			TiiActivityConfig activityConfig = optActivityConfig.get();
+			TiiInternalActivityConfig activityConfig = optActivityConfig.get();
 			activityConfig.setLatestIndividualExtensionDate(latestIndividualExtensionDate);
 			save(activityConfig);
 			return true;

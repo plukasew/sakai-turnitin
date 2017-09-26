@@ -53,7 +53,7 @@ import org.w3c.dom.NodeList;
 
 import lombok.extern.slf4j.Slf4j;
 
-import org.sakaiproject.turnitin.api.TiiActivityConfig;
+import org.sakaiproject.turnitin.api.TiiInternalActivityConfig;
 import org.sakaiproject.contentreview.service.TurnitinExtendedContentReviewService;
 
 @Slf4j
@@ -147,7 +147,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 		SecurityAdvisor advisor = new SimpleSecurityAdvisor(sessionManager.getCurrentSessionUserId(), "site.upd", "/site/!admin");
 
 		// TIITODO: strategy to determine which tool registration id to use?
-		Optional<TiiActivityConfig> activityConfig = getActivityConfig("sakai.assignment.grades", taskId);
+		Optional<TiiInternalActivityConfig> activityConfig = getActivityConfig("sakai.assignment.grades", taskId);
 		if (activityConfig.isPresent())
 		{
 			String ltiId = activityConfig.get().getStealthedLtiId();

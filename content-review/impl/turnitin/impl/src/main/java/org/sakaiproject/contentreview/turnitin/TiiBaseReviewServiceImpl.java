@@ -74,7 +74,7 @@ import org.sakaiproject.contentreview.turnitin.util.TurnitinAPIUtil;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinReturnValue;
 import org.sakaiproject.contentreview.turnitin.util.TurnitinLTIUtil;
 import org.sakaiproject.assignment.api.AssignmentService;
-import org.sakaiproject.turnitin.api.TiiActivityConfig;
+import org.sakaiproject.turnitin.api.TiiInternalActivityConfig;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.Setter;
@@ -935,8 +935,8 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 						TurnitinConstants.PROVIDER_ID);*/
 					
 					// TIITODO: strategy to determine which tool registration id to use?
-					Optional<TiiActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, a.getId());
-					tiiId = activityConfig.map(TiiActivityConfig::getTurnitinAsssignmentId).orElse("");
+					Optional<TiiInternalActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, a.getId());
+					tiiId = activityConfig.map(TiiInternalActivityConfig::getTurnitinAsssignmentId).orElse("");
 				}
 
 				if(tiiId.isEmpty()){
@@ -1613,7 +1613,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		
 		// TIITODO: will we need to write a conversion script of sakai_site_property -> TiiActivityConfig?
 		// TIITODO: strategy to determine which tool registration id to use?
-		Optional<TiiActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentId);
+		Optional<TiiInternalActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentId);
 		if (activityConfig.isPresent())
 		{
 			String ltiReportsId = activityConfig.get().getStealthedLtiId();
@@ -1631,7 +1631,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		return ltiReportsUrl;
 	}
 	
-	protected String getLTIAccess(TiiActivityConfig activityConfig, String contextId)
+	protected String getLTIAccess(TiiInternalActivityConfig activityConfig, String contextId)
 	{
 		String ltiId = activityConfig.getStealthedLtiId();
 		if (ltiId == null)
@@ -2523,7 +2523,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	}
 	
 	// TIITODO: complete these two methods - public? Or private with specific methods for individual properties?
-	protected Optional<TiiActivityConfig> getActivityConfig(String toolId, String activityId)
+	protected Optional<TiiInternalActivityConfig> getActivityConfig(String toolId, String activityId)
 	{
 		/*Search search = new Search();
 		search.addRestricion(new Restriction("toolId", toolId));
@@ -2533,7 +2533,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		return Optional.empty();
 	}
 
-	protected boolean saveOrUpdateActivityConfig(TiiActivityConfig activityConfig)
+	protected boolean saveOrUpdateActivityConfig(TiiInternalActivityConfig activityConfig)
 	{
 		// TIITODO: implement this using TiiActivityConfigDao
 		// ContentReviewItemDao extends HibernateCommonDao; save() invokes Session.saverOrUpdate()
@@ -2652,7 +2652,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			String asnId = asnRefToId(taskId);  // taskId is an assignment reference, but we sometimes only want the assignment id
 			//String ltiId = getActivityConfigValue(TurnitinConstants.STEALTHED_LTI_ID, asnId, TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, TurnitinConstants.PROVIDER_ID);
 			String ltiId = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, asnId)
-					.map(TiiActivityConfig::getStealthedLtiId).orElse("");
+					.map(TiiInternalActivityConfig::getStealthedLtiId).orElse("");
 			String ltiReportsId = null;
 
 			ltiReportsId = s.getProperties().getProperty("turnitin_reports_lti_id");
@@ -2872,7 +2872,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 
 				/*boolean added = saveOrUpdateActivityConfigEntry(TurnitinConstants.STEALTHED_LTI_ID, String.valueOf(ltiContent), asnId, TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID,
 						TurnitinConstants.PROVIDER_ID, true);*/
-				TiiActivityConfig cfg = new TiiActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, asnId, String.valueOf(ltiContent));
+				TiiInternalActivityConfig cfg = new TiiInternalActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, asnId, String.valueOf(ltiContent));
 				boolean added = saveOrUpdateActivityConfig(cfg);
 				if (!added)
 				{
