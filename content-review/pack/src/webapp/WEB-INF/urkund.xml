@@ -35,7 +35,7 @@
 		<property name="urkundConn" ref="org.sakaiproject.contentreview.urkund.UrkundAccountConnection" />
 		<property name="urkundContentValidator" ref="org.sakaiproject.contentreview.urkund.UrkundContentValidator" />
 		
-		<property name="siteAdvisor" ref="org.sakaiproject.contentreview.service.ContentReviewSiteAdvisor" />
+		<property name="siteAdvisor" ref="org.sakaiproject.contentreview.advisors.ContentReviewSiteAdvisor" />
 	</bean>
 
 	<!-- Default to allow all sites to use Urkund regardless of site type or property -->

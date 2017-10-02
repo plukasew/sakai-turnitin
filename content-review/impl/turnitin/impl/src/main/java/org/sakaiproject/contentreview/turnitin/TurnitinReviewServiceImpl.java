@@ -54,6 +54,7 @@ import org.w3c.dom.NodeList;
 import lombok.extern.slf4j.Slf4j;
 
 import org.sakaiproject.turnitin.api.TiiInternalActivityConfig;
+import org.sakaiproject.contentreview.service.ContentReviewQueueService;
 import org.sakaiproject.contentreview.service.TurnitinExtendedContentReviewService;
 
 @Slf4j
@@ -64,13 +65,22 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 
 	final static long LOCK_PERIOD = 12000000;
 
-	/**
-	 *  Setters
-	 */
-	private GradebookService gradebookService = (GradebookService)
-			ComponentManager.get("org.sakaiproject.service.gradebook.GradebookService");
-	private GradebookExternalAssessmentService gradebookExternalAssessmentService =
-			(GradebookExternalAssessmentService)ComponentManager.get("org.sakaiproject.service.gradebook.GradebookExternalAssessmentService");
+	// Setters
+	private GradebookService gradebookService;
+	public void setGradebookService(GradebookService gradebookService)
+	{
+		this.gradebookService = gradebookService;
+	}
+	private GradebookExternalAssessmentService gradebookExternalAssessmentService;
+	public void setGradebookExternalAssessmentService(GradebookExternalAssessmentService gradebookExternalAssessmentService)
+	{
+		this.gradebookExternalAssessmentService = gradebookExternalAssessmentService;
+	}
+	private ContentReviewQueueService crqs;
+	public void setCrqs(ContentReviewQueueService crqs)
+	{
+		this.crqs = crqs;
+	}
 
 	/**
 	 * Place any code that should run when this class is initialized by spring
@@ -243,7 +253,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 		}
 
 		return !useLTI || getActivityConfig(toolId, activityId)
-				.map(cfg -> !cfg.getTurnitinAsssignmentId().isEmpty() && !cfg.getStealthedLtiId().isEmpty())
+				.map(cfg -> !cfg.getTurnitinAssignmentId().isEmpty() && !cfg.getStealthedLtiId().isEmpty())
 				.orElse(false);
 	}
 	

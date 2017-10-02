@@ -30,6 +30,11 @@
 			<type>pom</type>
 		</dependency>
 		<dependency>
+			<groupId>org.sakaiproject.contentreview.turnitin</groupId>
+			<artifactId>content-review-turnitin-impl-impl</artifactId>
+			<version>13-SNAPSHOT</version>
+		</dependency>
+		<dependency>
 			<groupId>org.sakaiproject.contentreview.vericite</groupId>
 			<artifactId>content-review-vericite-impl</artifactId>
 		</dependency>

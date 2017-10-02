@@ -50,10 +50,16 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 	 */
 	private PaperRepository paperRepository;
 
+	/**
+	 * Determines when the originality report is to be generated
+	 */
+	private ReportGenerationSpeed reportGenerationSpeed;
+
 	// Represents which content the paper will be checked against
 	private boolean checkTiiPaperRepository;
 	private boolean checkCurrentAndArchived;
 	private boolean checkPeriodicalsJournalsPublications;
+	private boolean checkInstitutionalRepository;
 
 	private boolean excludeBibliographic;
 	private boolean excludeQuoted;
@@ -78,9 +84,11 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 		allowAnyFile = false;
 		allowStudentViewExternalGrade = false;
 		paperRepository = PaperRepository.NONE;
+		reportGenerationSpeed = ReportGenerationSpeed.IMMEDIATELY;
 		checkTiiPaperRepository = true;
 		checkCurrentAndArchived = true;
 		checkPeriodicalsJournalsPublications = true;
+		checkInstitutionalRepository = true;
 		excludeBibliographic = true;
 		excludeQuoted = true;
 		excludeSmallMatches = false;
@@ -102,9 +110,11 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 		allowAnyFile = false;
 		allowStudentViewExternalGrade = false;
 		paperRepository = PaperRepository.NONE;
+		reportGenerationSpeed = ReportGenerationSpeed.IMMEDIATELY;
 		checkTiiPaperRepository = true;
 		checkCurrentAndArchived = true;
 		checkPeriodicalsJournalsPublications = true;
+		checkInstitutionalRepository = true;
 		excludeBibliographic = true;
 		excludeQuoted = true;
 		excludeSmallMatches = false;
@@ -152,7 +162,7 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 		this.stealthedLtiId = stealthedLtiId;
 	}
 
-	public String getTurnitinAsssignmentId()
+	public String getTurnitinAssignmentId()
 	{
 		return turnitinAssignmentId;
 	}
@@ -205,6 +215,49 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 		this.paperRepository = paperRepository;
 	}
 
+	/**
+	 * DO NOT USE! This is strictly for hibernate; use the PaperRepository enum
+	 */
+	public String getStrPaperRepository()
+	{
+		return paperRepository.name();
+	}
+
+	/**
+	 * DO NOT USE! This is strictly for hibernate; use the PaperRepository enum
+	 */
+	public void setStrPaperRepository(String strPaperRepository)
+	{
+		paperRepository = Enum.valueOf(PaperRepository.class, strPaperRepository);
+	}
+
+	public ReportGenerationSpeed getReportGenerationSpeed()
+	{
+		return reportGenerationSpeed;
+	}
+
+	@Override
+	public void setReportGenerationSpeed(ReportGenerationSpeed reportGenerationSpeed)
+	{
+		this.reportGenerationSpeed = reportGenerationSpeed;
+	}
+
+	/**
+	 * DO NOT USE! This is strictly for hibernate; use the ReportGenerationSpeed enum
+	 */
+	public String getStrReportGenerationSpeed()
+	{
+		return reportGenerationSpeed.name();
+	}
+
+	/**
+	 * DO NOT USE! This is strictly for hibernate; use the ReportGenerationSpeed enum
+	 */
+	public void setStrReportGenerationSpeed(String strReportGenerationSpeed)
+	{
+		reportGenerationSpeed = Enum.valueOf(ReportGenerationSpeed.class, strReportGenerationSpeed);
+	}
+
 	public boolean isCheckTiiPaperRepository()
 	{
 		return checkTiiPaperRepository;
@@ -236,6 +289,17 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 	public void setCheckPeriodicalsJournalsPublications(boolean checkPeriodicalsJournalsPublications)
 	{
 		this.checkPeriodicalsJournalsPublications = checkPeriodicalsJournalsPublications;
+	}
+
+	public boolean isCheckInstitutionalRepository()
+	{
+		return checkInstitutionalRepository;
+	}
+
+	@Override
+	public void setCheckInstitutionalRepository(boolean checkInstitutionalRepository)
+	{
+		this.checkInstitutionalRepository = checkInstitutionalRepository;
 	}
 
 	public boolean isExcludeBibliographic()
@@ -280,6 +344,22 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 	public void setSmallMatchType(SmallMatchType smallMatchType)
 	{
 		this.smallMatchType = smallMatchType;
+	}
+
+	/**
+	 * DO NOT USE! This is strictly for hibernate; use the SmallMatchType enum
+	 */
+	public String getStrSmallMatchType()
+	{
+		return smallMatchType.name();
+	}
+
+	/**
+	 * DO NOT USE! This is strictly for hibernate; use the SmallMatchType enum
+	 */
+	public void setStrSmallMatchType(String strSmallMatchType)
+	{
+		this.smallMatchType = Enum.valueOf(SmallMatchType.class, strSmallMatchType);
 	}
 
 	public int getSmallMatchValue()

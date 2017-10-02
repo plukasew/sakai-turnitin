@@ -936,7 +936,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 					
 					// TIITODO: strategy to determine which tool registration id to use?
 					Optional<TiiInternalActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, a.getId());
-					tiiId = activityConfig.map(TiiInternalActivityConfig::getTurnitinAsssignmentId).orElse("");
+					tiiId = activityConfig.map(TiiInternalActivityConfig::getTurnitinAssignmentId).orElse("");
 				}
 
 				if(tiiId.isEmpty()){
