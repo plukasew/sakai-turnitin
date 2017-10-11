@@ -218,13 +218,36 @@ public class Assignment {
         GROUPED
     }
 
-    public enum SubmissionType {
-        ASSIGNMENT_SUBMISSION_TYPE_NONE,           // 0
-        TEXT_ONLY_ASSIGNMENT_SUBMISSION,           // 1
-        ATTACHMENT_ONLY_ASSIGNMENT_SUBMISSION,     // 2
-        TEXT_AND_ATTACHMENT_ASSIGNMENT_SUBMISSION, // 3
-        NON_ELECTRONIC_ASSIGNMENT_SUBMISSION,      // 4
-        SINGLE_ATTACHMENT_SUBMISSION               // 5
+    public enum SubmissionType
+	{
+        ASSIGNMENT_SUBMISSION_TYPE_NONE(0),           // 0
+        TEXT_ONLY_ASSIGNMENT_SUBMISSION(1),           // 1
+        ATTACHMENT_ONLY_ASSIGNMENT_SUBMISSION(2),     // 2
+        TEXT_AND_ATTACHMENT_ASSIGNMENT_SUBMISSION(3), // 3
+        NON_ELECTRONIC_ASSIGNMENT_SUBMISSION(4),      // 4
+        SINGLE_ATTACHMENT_SUBMISSION(5);              // 5
+		
+		// TIITODO: see if we can drop all this conversion code by just using the enum directly in all locations
+		public final int code;
+		
+		SubmissionType(int value)
+		{
+			code = value;
+		}
+		
+		public static SubmissionType fromInt(int i)
+		{
+			switch (i)
+			{
+				case 0: return ASSIGNMENT_SUBMISSION_TYPE_NONE;
+				case 1: return TEXT_ONLY_ASSIGNMENT_SUBMISSION;
+				case 2: return ATTACHMENT_ONLY_ASSIGNMENT_SUBMISSION;
+				case 3: return TEXT_AND_ATTACHMENT_ASSIGNMENT_SUBMISSION;
+				case 4: return NON_ELECTRONIC_ASSIGNMENT_SUBMISSION;
+				case 5: return SINGLE_ATTACHMENT_SUBMISSION;
+				default: return ASSIGNMENT_SUBMISSION_TYPE_NONE;
+			}
+		}
     }
 
     public enum GradeType {

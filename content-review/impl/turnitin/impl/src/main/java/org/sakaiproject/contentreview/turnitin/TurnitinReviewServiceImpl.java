@@ -52,10 +52,12 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
 import lombok.extern.slf4j.Slf4j;
+import org.sakaiproject.contentreview.service.ContentReviewService;
 
 import org.sakaiproject.turnitin.api.TiiInternalActivityConfig;
 import org.sakaiproject.contentreview.service.ContentReviewQueueService;
 import org.sakaiproject.contentreview.service.TurnitinExtendedContentReviewService;
+import org.sakaiproject.contentreview.service.dao.TiiActivityConfig;
 
 @Slf4j
 // TIITODO: make an interface that exposes the TII-specific methods that need to be called from outside the TII impl
@@ -146,7 +148,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 	@Override
 	public String getLTIAccess(String taskId, String siteId)
 	{
-		return getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId)
+		return getInternalActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId)
 				.map(cfg -> super.getLTIAccess(cfg, siteId)).orElse("");
 	}
 	
@@ -157,7 +159,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 		SecurityAdvisor advisor = new SimpleSecurityAdvisor(sessionManager.getCurrentSessionUserId(), "site.upd", "/site/!admin");
 
 		// TIITODO: strategy to determine which tool registration id to use?
-		Optional<TiiInternalActivityConfig> activityConfig = getActivityConfig("sakai.assignment.grades", taskId);
+		Optional<TiiInternalActivityConfig> activityConfig = getInternalActivityConfig("sakai.assignment.grades", taskId);
 		if (activityConfig.isPresent())
 		{
 			String ltiId = activityConfig.get().getStealthedLtiId();
@@ -252,7 +254,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 			return false;
 		}
 
-		return !useLTI || getActivityConfig(toolId, activityId)
+		return !useLTI || getInternalActivityConfig(toolId, activityId)
 				.map(cfg -> !cfg.getTurnitinAssignmentId().isEmpty() && !cfg.getStealthedLtiId().isEmpty())
 				.orElse(false);
 	}
@@ -288,6 +290,41 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 			item.setStatus(newStatus);
 			dao.update(item);
 		}*/
+	}
+	
+	@Override
+	public Optional<TiiActivityConfig> getActivityConfig(String toolId, String activityId)
+	{
+		return Optional.ofNullable(getInternalActivityConfig(toolId, activityId).map(cfg -> (TiiActivityConfig) cfg).orElse(null));
+	}
+	
+	@Override
+	public TiiActivityConfig newActivityConfig()
+	{
+		return new TiiInternalActivityConfig();
+	}
+	
+	@Override
+	public void updateActivityConfig(String toolId, String activityId, TiiActivityConfig cfg)
+	{
+		// TIITODO: implement this
+	}
+	
+	@Override
+	public void createAssignment(String siteId, String taskId, ContentReviewService.CreateAssignmentOpts createAsnOpts)
+		throws SubmissionException, TransientSubmissionException
+	{
+		// TIITODO: deal with the switch to CreateAssignmentOpts
+		//super.createAssignment(siteId, taskId, null);
+	}
+	
+	@Override
+	public boolean usesLTI(Site site, Date asnCreationDate)
+	{
+		// TIITODO: implement this properly, look at using the SiteAdvisor, maybe come up with a better
+		// flag than the date
+		
+		return true;
 	}
 	
 	/* -------------------- END TURNITIN EXTENDED CONTENT REVIEW SERVICE API METHODS ------------------------ */

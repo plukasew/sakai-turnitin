@@ -15,6 +15,8 @@
  */
 package org.sakaiproject.contentreview.service;
 
+import java.time.Instant;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -28,6 +30,7 @@ import org.sakaiproject.contentreview.exception.QueueException;
 import org.sakaiproject.contentreview.exception.ReportException;
 import org.sakaiproject.contentreview.exception.SubmissionException;
 import org.sakaiproject.contentreview.exception.TransientSubmissionException;
+import org.sakaiproject.contentreview.service.dao.TiiActivityConfig;
 
 /**
  *  ContentReview Service manages submission to the Content review queue and retrieving reports from the service
@@ -335,4 +338,29 @@ public interface ContentReviewService {
 	 */
 	public void createAssignment(String siteId, String taskId, Map extraAsnnOpts)
 	throws SubmissionException, TransientSubmissionException;
+	
+	public static class CreateAssignmentOpts
+	{
+		public TiiActivityConfig tiiActivityConfig;
+		public String title, instructions;
+		public boolean allowStudentsToViewReports;
+		public int excludeType, excludeValue, points;
+		public Instant openTime, dueTime, closeTime;
+		public List<String> attachments;
+		
+		public CreateAssignmentOpts()
+		{
+			tiiActivityConfig = null; // TIITODO: find a better default for this
+			title = instructions = "";
+			allowStudentsToViewReports = false;
+			excludeType = excludeValue = points = 0;
+			openTime = dueTime = closeTime = Instant.EPOCH;
+			attachments = Collections.emptyList();
+		}
+		
+		public boolean getAcceptLateSubmissions()
+		{
+			return closeTime.compareTo(dueTime) > 0;
+		}
+	}
 }

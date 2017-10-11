@@ -1,15 +1,14 @@
 package org.sakaiproject.contentreview.service;
 
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.sakaiproject.content.api.ContentResource;
-import org.sakaiproject.contentreview.dao.ContentReviewItem;
 import org.sakaiproject.contentreview.exception.QueueException;
 import org.sakaiproject.contentreview.exception.ReportException;
 import org.sakaiproject.contentreview.exception.SubmissionException;
 import org.sakaiproject.contentreview.exception.TransientSubmissionException;
+import org.sakaiproject.contentreview.service.dao.TiiActivityConfig;
 import org.sakaiproject.site.api.Site;
 
 /**
@@ -176,6 +175,10 @@ public interface TurnitinExtendedContentReviewService extends ContentReviewServi
 	 */
 	public boolean validateActivityConfiguration(String toolId, String activityId);
 	
+	// TIITODO: determine if this actually belongs here or in AssignmentService. In theory this is all
+	// assignment data, we just happened to not have an efficient way to retrieve the latest individual
+	// extension date, so we stored it with the TII properties when we calculated it. Perhaps now it can
+	// be stored with the assignment, or at least more efficiently calculated when needed.
 	/**
 	 * Get the effective due date for the given ContentReviewItem. Takes into account assignment due date,
 	 * assignment resubmit due date, any manually set student-specific resubmit date if present, and the due
@@ -199,4 +202,37 @@ public interface TurnitinExtendedContentReviewService extends ContentReviewServi
 	 */
 	public void updatePendingStatusForAssignment(String assignmentRef, String generateReportsSetting);
 	
+	/**
+	 * Returns the Turnitin configuration for this activity (ie. assignment)
+	 * @param toolId the Sakai tool id (ie. sakai.assignment.grades)
+	 * @param activityId the activity id (ie. sakai assignment id)
+	 * @return the configuration for this activity, if it exists
+	 */
+	public Optional<TiiActivityConfig> getActivityConfig(String toolId, String activityId);
+	
+	/**
+	 * Factory method to create a new activity configuration object
+	 * @return a new TiiActivityConfig object initialized with default values
+	 */
+	public TiiActivityConfig newActivityConfig();
+	
+	/**
+	 * Updates the configuration for the given activity
+	 * @param toolId the Sakai tool id (ie. sakai.assignment.grades)
+	 * @param activityId the activity id (ie. sakai assignment id)
+	 * @param cfg the configuration for this activity
+	 */
+	public void updateActivityConfig(String toolId, String activityId, TiiActivityConfig cfg);
+	
+	public void createAssignment(String siteId, String taskId, ContentReviewService.CreateAssignmentOpts createAsnOpts)
+		throws SubmissionException, TransientSubmissionException;
+	
+	/**
+	 * Returns true if this site/assignment combination use the Turnitin LTI integration
+	 * @param site
+	 * @param asn
+	 * @return true if the LTI integration is used
+	 */
+	public boolean usesLTI(Site site, Date asnCreationDate);
+
 }
