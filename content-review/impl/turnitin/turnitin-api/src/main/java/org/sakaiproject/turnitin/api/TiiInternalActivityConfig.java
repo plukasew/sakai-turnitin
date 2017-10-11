@@ -204,6 +204,7 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 		this.allowStudentViewExternalGrade = allowStudentViewExternalGrade;
 	}
 
+	@Override
 	public PaperRepository getPaperRepository()
 	{
 		return paperRepository;
@@ -258,6 +259,7 @@ public class TiiInternalActivityConfig implements TiiActivityConfig
 		reportGenerationSpeed = Enum.valueOf(ReportGenerationSpeed.class, strReportGenerationSpeed);
 	}
 
+	@Override
 	public boolean isCheckTiiPaperRepository()
 	{
 		return checkTiiPaperRepository;

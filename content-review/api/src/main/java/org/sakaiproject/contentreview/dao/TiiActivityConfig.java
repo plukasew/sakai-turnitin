@@ -28,8 +28,12 @@ public interface TiiActivityConfig
 	public void setAllowAnyFile(boolean allowAnyFile);
 
 	public void setAllowStudentViewExternalGrade(boolean allowStudentViewExternalGrade);
+	
+	public PaperRepository getPaperRepository();
 
 	public void setPaperRepository(PaperRepository paperRepository);
+	
+	public boolean isCheckTiiPaperRepository();
 
 	public void setReportGenerationSpeed(ReportGenerationSpeed reportGenerationSpeed);
 

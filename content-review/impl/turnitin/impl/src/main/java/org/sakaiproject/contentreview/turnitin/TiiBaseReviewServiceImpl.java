@@ -24,8 +24,6 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URLDecoder;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -56,7 +54,6 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang.StringUtils;
 
 import org.sakaiproject.content.api.ContentResource;
-import org.sakaiproject.contentreview.dao.ContentReviewItemDao;
 import org.sakaiproject.contentreview.exception.QueueException;
 import org.sakaiproject.contentreview.exception.ReportException;
 import org.sakaiproject.contentreview.exception.SubmissionException;
@@ -65,8 +62,6 @@ import org.sakaiproject.contentreview.service.ContentReviewService;
 import org.sakaiproject.contentreview.service.ContentReviewQueueService;
 import org.sakaiproject.contentreview.advisors.ContentReviewSiteAdvisor;
 import org.sakaiproject.contentreview.dao.ContentReviewConstants;
-import org.sakaiproject.genericdao.api.search.Restriction;
-import org.sakaiproject.genericdao.api.search.Search;
 import org.sakaiproject.site.api.Site;
 import org.sakaiproject.tool.api.ToolManager;
 import org.sakaiproject.user.api.UserDirectoryService;
@@ -935,7 +930,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 						TurnitinConstants.PROVIDER_ID);*/
 					
 					// TIITODO: strategy to determine which tool registration id to use?
-					Optional<TiiInternalActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, a.getId());
+					Optional<TiiInternalActivityConfig> activityConfig = getInternalActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, a.getId());
 					tiiId = activityConfig.map(TiiInternalActivityConfig::getTurnitinAssignmentId).orElse("");
 				}
 
@@ -1613,7 +1608,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		
 		// TIITODO: will we need to write a conversion script of sakai_site_property -> TiiActivityConfig?
 		// TIITODO: strategy to determine which tool registration id to use?
-		Optional<TiiInternalActivityConfig> activityConfig = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentId);
+		Optional<TiiInternalActivityConfig> activityConfig = getInternalActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentId);
 		if (activityConfig.isPresent())
 		{
 			String ltiReportsId = activityConfig.get().getStealthedLtiId();
@@ -2523,7 +2518,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	}
 	
 	// TIITODO: complete these two methods - public? Or private with specific methods for individual properties?
-	protected Optional<TiiInternalActivityConfig> getActivityConfig(String toolId, String activityId)
+	protected Optional<TiiInternalActivityConfig> getInternalActivityConfig(String toolId, String activityId)
 	{
 		/*Search search = new Search();
 		search.addRestricion(new Restriction("toolId", toolId));
@@ -2651,7 +2646,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			
 			String asnId = asnRefToId(taskId);  // taskId is an assignment reference, but we sometimes only want the assignment id
 			//String ltiId = getActivityConfigValue(TurnitinConstants.STEALTHED_LTI_ID, asnId, TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, TurnitinConstants.PROVIDER_ID);
-			String ltiId = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, asnId)
+			String ltiId = getInternalActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, asnId)
 					.map(TiiInternalActivityConfig::getStealthedLtiId).orElse("");
 			String ltiReportsId = null;
 
@@ -3291,7 +3286,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		// This comes at the cost that we can never move TII's due date earlier once we've granted an extension; we can only push it out
 		/*String strLatestExtensionDate = getActivityConfigValue(TurnitinConstants.TURNITIN_ASN_LATEST_INDIVIDUAL_EXTENSION_DATE,
 				TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId, TurnitinConstants.PROVIDER_ID);*/
-		long latestExtensionDate = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId)
+		long latestExtensionDate = getInternalActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, taskId)
 				.map(cfg -> cfg.getLatestIndividualExtensionDate().getTime()).orElse(0L);
 		if (extensionDate != null)
 		{
@@ -3521,7 +3516,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		/*String strLatestExtensionDate = getActivityConfigValue( TurnitinConstants.TURNITIN_ASN_LATEST_INDIVIDUAL_EXTENSION_DATE,
 														 TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentID,
 														 TurnitinConstants.PROVIDER_ID );*/
-		long latestExtensionDate = getActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentID)
+		long latestExtensionDate = getInternalActivityConfig(TurnitinConstants.SAKAI_ASSIGNMENT_TOOL_ID, assignmentID)
 				.map(cfg -> cfg.getLatestIndividualExtensionDate().getTime()).orElse(0L);
 
 		if (latestExtensionDate > dueDateMillis) {
