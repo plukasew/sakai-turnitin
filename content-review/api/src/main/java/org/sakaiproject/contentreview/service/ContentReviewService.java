@@ -339,6 +339,12 @@ public interface ContentReviewService {
 	public void createAssignment(String siteId, String taskId, Map extraAsnnOpts)
 	throws SubmissionException, TransientSubmissionException;
 	
+	// TIITODO: temp hack, remove later
+	default ContentReviewService getSelectedProvider()
+	{
+		return null;
+	}
+	
 	public static class CreateAssignmentOpts
 	{
 		public TiiActivityConfig tiiActivityConfig;

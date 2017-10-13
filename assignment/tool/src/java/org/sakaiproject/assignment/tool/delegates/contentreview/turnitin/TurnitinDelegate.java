@@ -233,8 +233,12 @@ public class TurnitinDelegate
 			String ltiLink = tiiServ.getLTIAccess(asn.getId(), site.getId());
 			log.debug("ltiLink " + ltiLink);
 			context.put("ltiLink", ltiLink);
-			int maxPointsInt = asn.getMaxGradePoint() / assignmentService.getScaleFactor();
-			context.put("maxPointsInt", maxPointsInt);
+			Integer maxGradePoints = asn.getMaxGradePoint();
+			if (maxGradePoints != null)
+			{
+				int maxPointsInt = maxGradePoints / assignmentService.getScaleFactor();
+				context.put("maxPointsInt", maxPointsInt);
+			}
 			return true;
 		}
 		
