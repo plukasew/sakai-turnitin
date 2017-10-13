@@ -167,7 +167,7 @@ public class ContentReviewDelegate
 		// providers are in play?
 		if ("Turnitin".equals(contentReviewService.getServiceName()))
 		{
-			TurnitinExtendedContentReviewService tiiServ = (TurnitinExtendedContentReviewService) contentReviewService;
+			TurnitinExtendedContentReviewService tiiServ = (TurnitinExtendedContentReviewService) contentReviewService.getSelectedProvider();
 			turnitin = Optional.of(new TurnitinDelegate(tiiServ, serverConfigurationService, rb, assignmentService,
 					securityService));
 		}

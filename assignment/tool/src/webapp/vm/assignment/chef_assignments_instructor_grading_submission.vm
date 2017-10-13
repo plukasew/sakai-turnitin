@@ -177,7 +177,7 @@
             #end
 
             ## Content Review
-            #if($allowReviewService && $assignment.AllowReviewService)
+            #if($allowReviewService && $assignment.ContentReview)
                 <tr>
                     <th>
                         $reviewServiceName&nbsp;$tlang.getString("review.report")

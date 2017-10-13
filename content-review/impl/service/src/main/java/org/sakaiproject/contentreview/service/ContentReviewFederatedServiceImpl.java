@@ -114,7 +114,8 @@ public class ContentReviewFederatedServiceImpl implements ContentReviewService {
 		return enabledProviders;
 	}
 
-	private ContentReviewService getSelectedProvider() {
+	// TIITODO: remove this temp hack (this method used to be private) to get the TII provider when we have a better way to do it
+	public ContentReviewService getSelectedProvider() {
 		if (StringUtils.isBlank(defaultProvider)) {
 			throw new ContentReviewProviderException("No Default Content Review Provider");
 		}
