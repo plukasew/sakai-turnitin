@@ -308,5 +308,24 @@ public class ContentReviewQueueServiceImpl implements ContentReviewQueueService 
 		Objects.requireNonNull(item.getProviderId(), "providerId cannot be null");
 		
 		itemDao.delete(item);
-	}	
+	}
+
+	@Override
+	@Transactional(readOnly=true)
+	public List<ContentReviewItem> getItemsWithAvailableReports(Integer providerId, String siteId, String taskId)
+	{
+		ContentReviewItemDao.SearchParameters params = new ContentReviewItemDao.SearchParameters();
+		params.providerId = providerId;
+		params.siteId = siteId;
+		params.taskId = taskId;
+		params.status = (long) ContentReviewConstants.ReviewStatus.SUBMITTED_REPORT_AVAILABLE.code;
+		return itemDao.findBySearchParameters(params);
+	}
+	
+	@Override
+	@Transactional(readOnly=true)
+	public Optional<ContentReviewItem> getNextSubmittedItemMissingExternalId(Integer providerId)
+	{
+		return itemDao.findSingleItemToSubmitMissingExternalId(providerId);
+	}
 }

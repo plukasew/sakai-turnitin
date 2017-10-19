@@ -191,7 +191,7 @@ public class TurnitinReviewServiceImpl extends TiiBaseReviewServiceImpl implemen
 	@Override
 	public boolean updateExternalId(String contentId, String externalId)
 	{
-		dao.findByProviderAndContentId(getProviderId(), contentId)
+		crqServ.getQueuedItem(getProviderId(), contentId)
 				.ifPresent(item ->
 				{ 
 					item.setExternalId(externalId);

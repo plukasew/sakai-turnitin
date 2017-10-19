@@ -21,6 +21,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.sakaiproject.assignment.api.AssignmentConstants;
 import org.sakaiproject.assignment.api.AssignmentReferenceReckoner;
 import org.sakaiproject.assignment.api.AssignmentService;
+import org.sakaiproject.assignment.api.ContentReviewResult;
 import org.sakaiproject.assignment.api.model.Assignment;
 import org.sakaiproject.assignment.api.model.AssignmentSubmission;
 import org.sakaiproject.assignment.tool.delegates.contentreview.turnitin.TurnitinDelegate;
@@ -996,8 +997,13 @@ public class ContentReviewDelegate
 		turnitin.ifPresent(tii -> tii.buildInstructorNewEditAssignmentContext(context, asn));
 	}
 	
-	public void buildInstructorGradeSubmissionContext(SessionState state, Context context, Assignment asn, Site site)
+	public void buildInstructorGradeSubmissionContext(SessionState state, Context context, Assignment asn, Site site,
+			AssignmentSubmission sub)
 	{
+		// get the content review results for this submission
+		Map<String, List<ContentReviewResult>> subResults = assignmentService.getContentReviewResults(site.getId(), asn, Collections.singletonList(sub));
+		context.put("submissionContentReviewResults", subResults.get(sub.getId()));
+		
 		turnitin.ifPresent(tii -> tii.putTiiLtiPropsIntoContext(state, context, asn, site));
 	}
 	

@@ -82,9 +82,9 @@ import org.sakaiproject.authz.api.SecurityAdvisor;
 import org.sakaiproject.authz.api.SecurityService;
 import org.sakaiproject.component.api.ServerConfigurationService;
 import org.sakaiproject.content.api.ContentHostingService;
+import org.sakaiproject.contentreview.dao.ContentReviewConstants.ReviewStatus;
 import org.sakaiproject.contentreview.dao.ContentReviewItemDao;
 import org.sakaiproject.contentreview.exception.TransientSubmissionException;
-import org.sakaiproject.contentreview.turnitin.dao.ExtendedContentReviewItemDao;
 import org.sakaiproject.db.api.SqlReader;
 import org.sakaiproject.entity.api.Entity;
 import org.sakaiproject.entity.api.EntityManager;
@@ -130,9 +130,6 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	private String defaultAssignId = null;
 	
 	private List<String> enabledSiteTypes;
-
-	@Setter
-	protected ExtendedContentReviewItemDao dao;
 
 	@Setter
 	private ToolManager toolManager;
@@ -209,7 +206,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	// Spring init
 	// TIITODO: wire this up as a Spring bean? Or is wiring up the subclass TurnitinReviewServiceImpl enough?
 	public void init()
-	{
+	{	
 		enabledSiteTypes = Arrays.asList(ArrayUtils.nullToEmpty(serverConfigurationService.getStrings("turnitin.sitetypes")));
 		if (!enabledSiteTypes.isEmpty())
 		{
@@ -419,19 +416,12 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	@Override
 	public int getReviewScore(String contentId, String taskId, String userId)
 			throws QueueException, ReportException, Exception {
-		log.debug("Getting review score for content: " + contentId);
-
-		ContentReviewItem item = getItemByContentId(contentId);
-		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
-		{
-			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
-			log.debug(msg);
-		}
 		
 		// TIITODO: in the original 13.x implementation there is a bunch of grade syncing code here
 		// if GradeMark is enabled. This is probably not the right place to sync grades, so
 		// I've commented it out. Grades should probably be sync'd at the point were the score
 		// is written, not where it is read. Find out where this is and implement the sync there.
+		// On the other hand, if the grade is updated externally there needs to be a way to get the updated grade...
 		
 		/*String[] assignData = null;
 		try {
@@ -468,7 +458,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		// legacy and LTI integrations.
 		
 		// TIITODO: what to return here if getReviewScore is null?
-		return item.getReviewScore();
+		return crqServ.getReviewScore(getProviderId(), contentId);
 	}
 	
 	// TIITODO: see comments about grade sync above and (re)move this method when possible
@@ -497,6 +487,8 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		
 		log.debug("getReviewReport for LTI integration");
 		//should have already checked lti integration on assignments tool
+
+		// check that the report is available
 		ContentReviewItem item = getItemByContentId(contentId);
 		Long status = item.getStatus();
 		if (ContentReviewConstants.SUBMITTED_REPORT_ON_DUE_DATE_CODE.equals(status)
@@ -701,7 +693,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			catch (IdUnusedException e) {
 				// If the assignment no longer exists, delete the contentreview_item and continue to next iteration
 				log.warn("No assignment with ID = " + currentItem.getTaskId() + ", deleting contentreview_item", e);
-				dao.delete(currentItem);
+				crqServ.delete(currentItem);
 				continue;
 			} catch (PermissionException e) {
 				log.warn("No permission for assignment with ID = " + currentItem.getTaskId(), e);
@@ -711,7 +703,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			if (a != null && !a.getContentReview())
 			{
 				log.warn("Assignment with ID = " + currentItem.getTaskId() + " does not have content review enabled; deleting contentreview_item");
-				dao.delete(currentItem);
+				crqServ.delete(currentItem);
 				continue;
 			}
 
@@ -1277,13 +1269,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	public List<ContentReviewItem> getReportList(String siteId, String taskId) {
 		log.debug("Returning list of reports for site: " + siteId + ", task: " + taskId);
 		
-		// TIITODO: make this a method of ContentReviewQueueService?
-		ContentReviewItemDao.SearchParameters params = new ContentReviewItemDao.SearchParameters();
-		params.providerId = getProviderId();
-		params.siteId = siteId;
-		params.taskId = taskId;
-		params.status = ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE;
-		return dao.findBySearchParameters(params);
+		return crqServ.getItemsWithAvailableReports(getProviderId(), siteId, taskId);
 	}
 	
 	@Override
@@ -1437,7 +1423,30 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	
 	@Override
 	public String getIconCssClassforScore(int score, String contentId)
-	{
+	{	
+		if (score < 0)
+		{
+			// TIITODO: this is inefficient but we don't have enough info in the params to do it another way
+			// maybe we have the change the CRS API
+			try
+			{
+				ReviewStatus status = ReviewStatus.fromItemStatus(getReviewStatus(contentId));
+				if (status == ReviewStatus.NOT_SUBMITTED
+						|| status == ReviewStatus.SUBMITTED_AWAITING_REPORT
+						|| status == ReviewStatus.SUBMITTED_REPORT_ON_DUE_DATE)
+				{
+					return "fa fa-clock-o"; // TIITODO: make contentReviewIcon styles for this instead of using FA styles directly
+				}
+				
+				return "fa fa-exclamation-triangle errorStyle"; // TIITODO: constant if we're going to also use this style below
+			}
+			catch (QueueException e)
+			{
+				// TIITODO: item isn't queued yet, show error? is this right? could it be queued in the future?
+				return "fa fa-exclamation-triangle errorStyle";
+			}
+		}
+		
 		// TIITODO: constants?
 		if (score == 0) {
 			return "contentReviewIconThreshold-5";
@@ -1465,10 +1474,26 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		crqServ.removeFromQueue(getProviderId(), contentId);
 	}
 	
+	// TIITODO: these "status" message methods are not about status codes, they are about error codes
+	// figure out how to do this properly.
 	@Override
 	public String getLocalizedStatusMessage(String messageCode, String userRef)
 	{
+		// TIITODO: handle this case
+		/*if (ContentReviewItem.SUBMITTED_REPORT_ON_DUE_DATE_CODE.equals(status))
+		{
+			Assignment assignment = getAssignment();
+			long effectiveDueDate = getEffectiveDueDate(item.getTaskId(), assignment.getCloseTime().getTime(), assignment.getProperties(),
+															m_serverConfigurationService.getInt("contentreview.due.date.queue.job.buffer.minutes", 0));
+			errorMessage = rb.getString("content_review.pending.info") + " " 
+							+ rb.getFormattedMessage("content_review.pending.reportOnDueDate", new Object[] { TimeService.newTime(effectiveDueDate).getDisplay() });
+		}*/
+		
+		// TIITODO: should return this if messageCode is null or invalid?
+		//rb.getString("content_review.error");
+		
 		String userId = EntityReference.getIdFromRef(userRef);
+		// TIITODO: this "turnitin" message bundle is probably wrong if we care about status codes and not error codes
 		ResourceLoader resourceLoader = new ResourceLoader(userId, "turnitin");
 		return resourceLoader.getString(messageCode);
 	}
@@ -2071,7 +2096,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 				.filter(item -> item.getExternalId() != null).collect(Collectors.toList());
 		
 		// Iterate through all items in status 10 (report pending, generated on due date)
-		awaitingReport.addAll(dao.findAwaitingReportsOnDueDate(getProviderId()));
+		//awaitingReport.addAll(dao.findAwaitingReportsOnDueDate(getProviderId()));
 		
 		Iterator<ContentReviewItem> listIterator = awaitingReport.iterator();
 		HashMap<String, Integer> reportTable = new HashMap<>();
@@ -2852,7 +2877,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 							for(ContentResource resource : resources)
 							{
 								//if it wasnt added
-								if (!dao.findByProviderAndContentId(getProviderId(), resource.getId()).isPresent())
+								if (!crqServ.getQueuedItem(getProviderId(), resource.getId()).isPresent())
 								{
 									log.debug(resource.getId() + " was not added previously, queueing now");
 									toQueue.add(resource);
@@ -3293,9 +3318,12 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		}
 	}
 	
+	// TIITODO: this should probably just take a List of ContentResources, and then it could be in CRS. But
+	// what to return? Does the caller need to know which are not acceptable?
 	private List<ContentResource> getAllAcceptableAttachments(AssignmentSubmission sub, boolean allowAnyFile)
 	{
 		// TIITODO: implement the missing method on AssignmentSubmission or replace with suitable alternative
+		// Probably shouldn't rely on assignment submission object here anyway
 		//List attachments = sub.getSubmittedAttachments();
 		List attachments = Collections.emptyList();  // TIITODO: replace this temp line after above is worked out
 		List<ContentResource> resources = new ArrayList<>();
@@ -3490,7 +3518,8 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		Optional<ContentReviewItem> nextItem = crqServ.getNextItemInQueueToSubmit(getProviderId());
 		if (!nextItem.isPresent())
 		{
-			nextItem = dao.findSingleItemToSubmitMissingExternalId(getProviderId());
+			// try to resubmit items that are still missing an external id (required for the LTI integration)
+			nextItem = crqServ.getNextSubmittedItemMissingExternalId(getProviderId());
 		}
 		
 		// TIITODO: old code used to handle setting the retry time if it was null. Do we still need to do this?
@@ -3562,7 +3591,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	 */
 	private ContentReviewItem getItemByContentId(String contentId) throws QueueException
 	{
-		Optional<ContentReviewItem> item = dao.findByProviderAndContentId(getProviderId(), contentId);
+		Optional<ContentReviewItem> item = crqServ.getQueuedItem(getProviderId(), contentId);
 		if (!item.isPresent())
 		{
 			throw new QueueException("Content " + contentId + " has not been queued previously");

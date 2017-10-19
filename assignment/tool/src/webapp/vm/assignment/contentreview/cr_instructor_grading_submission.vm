@@ -1,1 +1,48 @@
-
+<tr>
+	<th>
+		$reviewServiceName&nbsp;$tlang.getString("review.report")
+	</th>
+	<td>
+		#if (!$submission)
+			$tlang.getString("review.notavail")
+		#else
+			#set($reviewResults=$submissionContentReviewResults)
+			#if ($reviewResults.size() >= 3)
+				<div class="discTria">
+					<input class="disclosureTriangle" type="image"
+						   onclick="ASN.handleReportsTriangleDisclosure(this,this.parentNode.parentNode.children[1]); return false;"
+						   src="#imageLink("sakai/expand.gif")"
+						   alt="$tlang.getString('review.report.expand')"/>
+				## TODO: reconsider for i18n:
+					$reviewResults.size() $tlang.getString("review.reports")
+				</div>
+			<div id="reportsDiv" style="display:none;">
+			#end
+				#foreach ($reviewResult in $reviewResults)
+					<div>
+						#set ($props = $reviewResult.getContentResource().Properties)
+						#set ($report = $reviewResult.ReviewReport)
+						<span class="reportIcon">
+							#if (!$report.equals("Error"))
+							<a href="$report" target="_blank" rel="noreferrer">
+							#end
+								<span class="$reviewResult.getReviewIconCssClass()"
+									title="#if($report.equals("Error"))$reviewResult.ReviewError#{else}$reviewResult.ReviewScore#end">
+								</span>
+							#if (!$report.equals("Error"))
+							</a>
+							#end
+							</span>
+						#if ($reviewResult.isInline())
+							$tlang.getString("submission.inline")
+						#else
+							$validator.escapeHtml($props.getPropertyFormatted($props.NamePropDisplayName))
+						#end
+					</div>
+				#end
+			#if ($reviewResults.size() >= 3)
+			</div>
+			#end
+		#end
+	</td>
+</tr>

@@ -3179,7 +3179,11 @@ public class AssignmentAction extends PagedResourceActionII {
         letterGradeOptionsIntoContext(context);
 		
 		// content review
-		getSiteFromState(state).ifPresent(site -> crDelegate.buildInstructorGradeSubmissionContext(state, context, a, site));
+		if (s != null)
+		{
+			getSiteFromState(state).ifPresent(site ->
+				crDelegate.buildInstructorGradeSubmissionContext(state, context, a, site, s));
+		}
 
         String template = (String) getContext(data).get("template");
         return template + TEMPLATE_INSTRUCTOR_GRADE_SUBMISSION;
