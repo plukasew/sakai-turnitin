@@ -82,6 +82,7 @@ import org.sakaiproject.authz.api.SecurityAdvisor;
 import org.sakaiproject.authz.api.SecurityService;
 import org.sakaiproject.component.api.ServerConfigurationService;
 import org.sakaiproject.content.api.ContentHostingService;
+import org.sakaiproject.contentreview.dao.ContentReviewItemDao;
 import org.sakaiproject.contentreview.exception.TransientSubmissionException;
 import org.sakaiproject.contentreview.turnitin.dao.ExtendedContentReviewItemDao;
 import org.sakaiproject.db.api.SqlReader;
@@ -420,21 +421,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 			throws QueueException, ReportException, Exception {
 		log.debug("Getting review score for content: " + contentId);
 
-		List<ContentReviewItem> matchingItems = dao.findByProviderAnyMatching(getProviderId(), contentId, null, null, null, null, null, null);
-		if (matchingItems.isEmpty()) {
-			log.debug("Content " + contentId + " has not been queued previously");
-			throw new QueueException("Content " + contentId + " has not been queued previously");
-		}
-
-		if (matchingItems.size() > 1)
-		{
-			// TIITODO: probably not the best way to handle this. Should be db constraint on contentId
-			// and then we can use dao.findByProviderAndContentId() to get a single result
-			// see also similar check in getReviewReport()
-			log.debug("More than one matching item - using first item found");
-		}
-
-		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
+		ContentReviewItem item = getItemByContentId(contentId);
 		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
 		{
 			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
@@ -510,22 +497,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		
 		log.debug("getReviewReport for LTI integration");
 		//should have already checked lti integration on assignments tool
-		List<ContentReviewItem> matchingItems = dao.findByProviderAnyMatching(getProviderId(), contentId, null, null, null, null, null, null);
-		if (matchingItems.isEmpty()) {
-			log.debug("Content " + contentId + " has not been queued previously");
-			throw new QueueException("Content " + contentId + " has not been queued previously");
-		}
-
-		if (matchingItems.size() > 1)
-		{
-			// TIITODO: probably not the best way to handle this. Should be db constraint on contentId
-			// and then we can use dao.findByProviderAndContentId() to get a single result
-			// see also similar check in getReviewScore()
-			log.debug("More than one matching item found - using first item found");
-		}
-
-		// check that the report is available
-		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
+		ContentReviewItem item = getItemByContentId(contentId);
 		Long status = item.getStatus();
 		if (ContentReviewConstants.SUBMITTED_REPORT_ON_DUE_DATE_CODE.equals(status)
 				|| ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_AWAITING_REPORT_CODE.equals(status))
@@ -557,23 +529,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	@Override
 	public String getReviewReportInstructor(String contentId, String assignmentRef, String userId) throws QueueException, ReportException
 	{
-		List<ContentReviewItem> matchingItems = dao.findByProviderAnyMatching(getProviderId(), contentId, null, null, null, null, null, null);
-		if (matchingItems.isEmpty()) {
-			log.debug("Content " + contentId + " has not been queued previously");
-			throw new QueueException("Content " + contentId + " has not been queued previously");
-		}
-
-		if (matchingItems.size() > 1)
-		{
-			// TIITODO: see note in getReviewReport()
-			log.debug("More than one matching item found - using first item found");
-		}
-
-		// check that the report is available
-		// TODO if the database record does not show report available check with
-		// turnitin (maybe)
-
-		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
+		ContentReviewItem item = getItemByContentId(contentId);
 		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
 		{
 			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
@@ -607,23 +563,7 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 	@Override
 	public String getReviewReportStudent(String contentId, String assignmentRef, String userId) throws QueueException, ReportException
 	{
-		List<ContentReviewItem> matchingItems = dao.findByProviderAnyMatching(getProviderId(), contentId, null, null, null, null, null, null);
-		if (matchingItems.isEmpty()) {
-			log.debug("Content " + contentId + " has not been queued previously");
-			throw new QueueException("Content " + contentId + " has not been queued previously");
-		}
-
-		if (matchingItems.size() > 1)
-		{
-			// TIITODO: see note in getReviewReport()
-			log.debug("More than one matching item found - using first item found");
-		}
-
-		// check that the report is available
-		// TODO if the database record does not show report available check with
-		// turnitin (maybe)
-
-		ContentReviewItem item = (ContentReviewItem) matchingItems.iterator().next();
+		ContentReviewItem item = getItemByContentId(contentId);
 		if (item.getStatus().compareTo(ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE) != 0)
 		{
 			String msg = String.format(ContentReviewConstants.MSG_REPORT_NOT_AVAILABLE, item.getId(), item.getStatus());
@@ -1338,8 +1278,12 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 		log.debug("Returning list of reports for site: " + siteId + ", task: " + taskId);
 		
 		// TIITODO: make this a method of ContentReviewQueueService?
-		return dao.findByProviderAnyMatching(getProviderId(), null, null, siteId, taskId, null,
-				ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE, null);
+		ContentReviewItemDao.SearchParameters params = new ContentReviewItemDao.SearchParameters();
+		params.providerId = getProviderId();
+		params.siteId = siteId;
+		params.taskId = taskId;
+		params.status = ContentReviewConstants.CONTENT_REVIEW_SUBMITTED_REPORT_AVAILABLE_CODE;
+		return dao.findBySearchParameters(params);
 	}
 	
 	@Override
@@ -3608,6 +3552,23 @@ public class TiiBaseReviewServiceImpl implements ContentReviewService
 
 		// At this point, nextItem could be null (indicating the submission queue is empty)
 		return nextItem;*/
+	}
+
+	/**
+	 * Gets a ContentReviewItem with the specified contentId, and Turnitin as its provider
+	 * @param contentId the contentId to search
+	 * @return the item with the matching contentId, and Turnitin as its provider
+	 * @throws QueueException if the item is not found
+	 */
+	private ContentReviewItem getItemByContentId(String contentId) throws QueueException
+	{
+		Optional<ContentReviewItem> item = dao.findByProviderAndContentId(getProviderId(), contentId);
+		if (!item.isPresent())
+		{
+			throw new QueueException("Content " + contentId + " has not been queued previously");
+		}
+		return item.get();
+
 	}
 	
 	// TIITODO: remove if we don't need these (see above)

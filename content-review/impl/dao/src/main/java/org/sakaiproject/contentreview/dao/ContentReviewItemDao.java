@@ -36,25 +36,19 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 	protected static final String NEXT_RETRY_TIME_COL = "nextRetryTime";
 	
 	@SuppressWarnings("unchecked")
-	public List<ContentReviewItem> findByProviderAnyMatching(Integer providerId, String contentId, String userId, String siteId, String taskId,
-			String externalId, Long status, Integer errorCode) {
-
-		// TIITODO: this catch-all method signature is a nightmare.
-		// Who knows what findByProviderAnyMatching(providerId, null, null, null, null, "xyz", null, null) will return?
-		// Replace with a dedicated class so we can make calls similar to this:
-		// MyParams params = new MyParams(); params.externalId = "xzy"; dao.findByProviderAnyMatching(providerId, params);
-		
+	public List<ContentReviewItem> findBySearchParameters(SearchParameters params)
+	{
 		Criteria c = sessionFactory.getCurrentSession()
 				.createCriteria(ContentReviewItem.class)
-				.add(Restrictions.eq(PROVIDER_ID_COL, providerId));
+				.add(Restrictions.eq(PROVIDER_ID_COL, params.providerId));
 
-		if (contentId != null) c.add(Restrictions.eq(CONTENT_ID_COL, contentId));
-		if (userId != null) c.add(Restrictions.eq(USER_ID_COL, userId));
-		if (siteId != null) c.add(Restrictions.eq(SITE_ID_COL, siteId));
-		if (taskId != null) c.add(Restrictions.eq(TASK_ID_COL, taskId));
-		if (externalId != null) c.add(Restrictions.eq(EXTERNAL_ID_COL, externalId));
-		if (status != null) c.add(Restrictions.eq(STATUS_COL, status));
-		if (errorCode != null) c.add(Restrictions.eq(ERROR_CODE_COL, errorCode));
+		if (params.contentId != null) c.add(Restrictions.eq(CONTENT_ID_COL, params.contentId));
+		if (params.userId != null) c.add(Restrictions.eq(USER_ID_COL, params.userId));
+		if (params.siteId != null) c.add(Restrictions.eq(SITE_ID_COL, params.siteId));
+		if (params.taskId != null) c.add(Restrictions.eq(TASK_ID_COL, params.taskId));
+		if (params.externalId != null) c.add(Restrictions.eq(EXTERNAL_ID_COL, params.externalId));
+		if (params.status != null) c.add(Restrictions.eq(STATUS_COL, params.status));
+		if (params.errorCode != null) c.add(Restrictions.eq(ERROR_CODE_COL, params.errorCode));
 
 		return c.list();
 	}
@@ -108,5 +102,17 @@ public class ContentReviewItemDao extends HibernateCommonDao<ContentReviewItem> 
 				.setMaxResults(1);
 		
 		return Optional.ofNullable((ContentReviewItem) c.uniqueResult());
+	}
+
+	public static class SearchParameters
+	{
+		public Integer providerId = null;
+		public String contentId = null;
+		public String userId = null;
+		public String siteId = null;
+		public String taskId = null;
+		public String externalId = null;
+		public Long status = null;
+		public Integer errorCode = null;
 	}
 }

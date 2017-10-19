@@ -182,7 +182,11 @@ public class ContentReviewQueueServiceImpl implements ContentReviewQueueService 
 	public List<ContentReviewItem> getContentReviewItems(Integer providerId, String siteId, String taskId) {
 		Objects.requireNonNull(providerId, "providerId cannot be null");
 
-		return itemDao.findByProviderAnyMatching(providerId, null, null, siteId, taskId, null, null, null);
+		ContentReviewItemDao.SearchParameters params = new ContentReviewItemDao.SearchParameters();
+		params.providerId = providerId;
+		params.siteId = siteId;
+		params.taskId = taskId;
+		return itemDao.findBySearchParameters(params);
 	}
 
 	/* (non-Javadoc)
@@ -208,7 +212,12 @@ public class ContentReviewQueueServiceImpl implements ContentReviewQueueService 
 		Objects.requireNonNull(providerId, "providerId cannot be null");
 		Objects.requireNonNull(userId, "userId cannot be null");
 
-		List<ContentReviewItem> lockedItems = itemDao.findByProviderAnyMatching(providerId, null, userId, null, null, null, ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_USER_DETAILS_CODE, null);
+		ContentReviewItemDao.SearchParameters params = new ContentReviewItemDao.SearchParameters();
+		params.providerId = providerId;
+		params.userId = userId;
+		params.status = ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_USER_DETAILS_CODE;
+
+		List<ContentReviewItem> lockedItems = itemDao.findBySearchParameters(params);
 		for (ContentReviewItem item : lockedItems) {
 			item.setStatus(ContentReviewConstants.CONTENT_REVIEW_SUBMISSION_ERROR_RETRY_CODE);
 			itemDao.save(item);
@@ -248,7 +257,10 @@ public class ContentReviewQueueServiceImpl implements ContentReviewQueueService 
 	@Override
 	@Transactional(readOnly=true)
 	public List<ContentReviewItem> getQueuedNotSubmittedItems(Integer providerId) {
-		return itemDao.findByProviderAnyMatching(providerId, null, null, null, null, null, ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE, null);
+		ContentReviewItemDao.SearchParameters params = new ContentReviewItemDao.SearchParameters();
+		params.providerId = providerId;
+		params.status = ContentReviewConstants.CONTENT_REVIEW_NOT_SUBMITTED_CODE;
+		return itemDao.findBySearchParameters(params);
 	}
 
 	/* (non-Javadoc)
