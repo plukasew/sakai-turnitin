@@ -17,9 +17,69 @@ package org.sakaiproject.contentreview.dao;
 
 public class ContentReviewConstants
 {
+	public enum ReviewStatus
+	{
+		UNKNOWN(0, "Unknown status"),
+		NOT_SUBMITTED(1, "Content awaiting submission"),
+		SUBMITTED_AWAITING_REPORT(2, "Content submitted for review and awaiting report"),
+		SUBMITTED_REPORT_AVAILABLE(3, "Content submitted and report available"),
+		SUBMISSION_ERROR_RETRY(4, "Temporary error occurred submitting content - will retry"),
+		SUBMISSION_ERROR_NO_RETRY(5, "Error occurred submitting content - will not retry"),
+		SUBMISSION_ERROR_USER_DETAILS(6, "Error occurred submitting content - incomplete or invalid user details"),
+		REPORT_ERROR_RETRY(7, "Temporary error occurred retrieving report - will retry"),
+		REPORT_ERROR_NO_RETRY(8, "Error occurred retrieving report - will not retry"),
+		SUBMISSION_ERROR_RETRY_EXCEEDED(9, "Error number of retries exceeded"),
+		SUBMITTED_REPORT_ON_DUE_DATE(10, "Reports not available until due date");
+		
+		public final int code;
+		public final String description;
+		
+		ReviewStatus(int c, String d)
+		{
+			code = c;
+			description = d;
+		}
+		
+		public static ReviewStatus fromInt(Integer i)
+		{
+			if (i == null)
+			{
+				return UNKNOWN;
+			}
+			
+			switch (i)
+			{
+				case 1: return NOT_SUBMITTED;
+				case 2: return SUBMITTED_AWAITING_REPORT;
+				case 3: return SUBMITTED_REPORT_AVAILABLE;
+				case 4: return SUBMISSION_ERROR_RETRY;
+				case 5: return SUBMISSION_ERROR_NO_RETRY;
+				case 6: return SUBMISSION_ERROR_USER_DETAILS;
+				case 7: return REPORT_ERROR_RETRY;
+				case 8: return REPORT_ERROR_NO_RETRY;
+				case 9: return SUBMISSION_ERROR_RETRY_EXCEEDED;
+				case 10: return SUBMITTED_REPORT_ON_DUE_DATE;
+				default: return UNKNOWN;
+			}
+		}
+		
+		public static ReviewStatus fromItemStatus(Long status)
+		{
+			if (status == null)
+			{
+				return UNKNOWN;
+			}
+			
+			return fromInt(status.intValue());
+		}
+	}
+	
+	
+	
 	// TIITODO: the prefix "CONTENT_REVIEW" is redundant and should be removed from all these variable names once this all builds.
 	// Additionally, the messages are not localized so they should not be used outside of the database/log messages.
 	// Check all usages and confirm they are not used inappropriately where localized text should be used instead.
+	// Actually just use the enum above?
 	
 	public static final String CONTENT_REVIEW_NOT_SUBMITTED = "Content awaiting submission";
 	public static final Long CONTENT_REVIEW_NOT_SUBMITTED_CODE = new Long(1);

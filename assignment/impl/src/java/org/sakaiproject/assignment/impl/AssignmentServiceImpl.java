@@ -30,6 +30,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -63,7 +64,11 @@ import org.sakaiproject.calendar.api.CalendarService;
 import org.sakaiproject.component.api.ServerConfigurationService;
 import org.sakaiproject.content.api.ContentHostingService;
 import org.sakaiproject.content.api.ContentResource;
+import org.sakaiproject.contentreview.dao.ContentReviewConstants;
+import org.sakaiproject.contentreview.dao.ContentReviewItem;
 import org.sakaiproject.contentreview.exception.QueueException;
+import org.sakaiproject.contentreview.exception.ReportException;
+import org.sakaiproject.contentreview.exception.SubmissionException;
 import org.sakaiproject.contentreview.service.ContentReviewService;
 import org.sakaiproject.email.api.DigestService;
 import org.sakaiproject.email.api.EmailService;
@@ -146,6 +151,8 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     private DateTimeFormatter dateTimeFormatter;
     private boolean allowSubmitByInstructor;
+	
+	private AssignmentServiceContentReviewDelegate crDelegate;
 
     public void init() {
         log.info("init()");
@@ -171,6 +178,9 @@ public class AssignmentServiceImpl implements AssignmentService {
         functionManager.registerFunction(SECURE_GRADE_ASSIGNMENT_SUBMISSION);
         functionManager.registerFunction(SECURE_ASSIGNMENT_RECEIVE_NOTIFICATIONS);
         functionManager.registerFunction(SECURE_SHARE_DRAFTS);
+		
+		crDelegate = new AssignmentServiceContentReviewDelegate(contentReviewService, contentHostingService,
+				serverConfigurationService, securityService, sessionManager, entityManager);
     }
 
     @Override
@@ -3388,4 +3398,10 @@ String assignmentId = AssignmentReferenceReckoner.reckoner().reference(assignmen
             emailService.sendToUsers(users, emailUtil.getHeaders(null, "submission"), emailUtil.getNotificationMessage(submission, "submission"));
         }
     }
+	
+	@Override
+	public Map<String, List<ContentReviewResult>> getContentReviewResults(String siteId, Assignment asn, List<AssignmentSubmission> submissions)
+	{
+		return crDelegate.getContentReviewResults(siteId, asn, submissions);
+	}
 }

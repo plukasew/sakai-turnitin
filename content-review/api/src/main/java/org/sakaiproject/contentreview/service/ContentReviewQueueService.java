@@ -157,4 +157,20 @@ public interface ContentReviewQueueService {
 	 */
 	@Deprecated
 	void delete(ContentReviewItem item);
+	
+	/**
+	 * Returns items that have a report (score) available
+	 * @param providerId the id of the content review service provider
+	 * @param siteId the site id
+	 * @param taskId the task id (ie. assignment reference)
+	 * @return a possibly empty list of items that have had a score returned
+	 */
+	List<ContentReviewItem> getItemsWithAvailableReports(Integer providerId, String siteId, String taskId);
+	
+	/**
+	 * Gets the next item in the queue that has been submitted but doesn't have an external id
+	 * @param providerId the id of the content review service provider
+	 * @return the next item missing an external id, if any
+	 */
+	Optional<ContentReviewItem> getNextSubmittedItemMissingExternalId(Integer providerId);
 }

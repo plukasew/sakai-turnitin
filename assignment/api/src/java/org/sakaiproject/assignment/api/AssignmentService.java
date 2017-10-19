@@ -646,4 +646,7 @@ public interface AssignmentService extends EntityProducer {
     * This is used when creating a new gradebook item.
     */
     public String getToolTitle();
+	
+	// TIITODO: decide the best way to get this info
+	public Map<String, List<ContentReviewResult>> getContentReviewResults(String siteId, Assignment assignment, List<AssignmentSubmission> submissions);
 }
