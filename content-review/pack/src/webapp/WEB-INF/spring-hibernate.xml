@@ -18,4 +18,9 @@
 		<property name="persistentClass" value="org.sakaiproject.contentreview.dao.ContentReviewItem" />
 	</bean>
 
+	<bean id="org.sakaiproject.contentreview.turnitin.dao.TiiContentReviewRosterSyncDao" class="org.sakaiproject.contentreview.turnitin.dao.TiiContentReviewRosterSyncDao">
+		<property name="sessionFactory" ref="org.sakaiproject.springframework.orm.hibernate.GlobalSessionFactory" />
+		<property name="persistentClass" value="org.sakaiproject.contentreview.dao.ContentReviewItem" />
+	</bean>
+
 </beans>
